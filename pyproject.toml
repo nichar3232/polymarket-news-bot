@@ -1,0 +1,49 @@
+[project]
+name = "polymarket-agent"
+version = "0.1.0"
+description = "Autonomous Polymarket trading agent with Bayesian signal fusion"
+requires-python = ">=3.11"
+dependencies = [
+    "py-clob-client>=0.18.0",
+    "aiohttp>=3.9.0",
+    "websockets>=12.0",
+    "redis[asyncio]>=5.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "groq>=0.4.0",
+    "google-genai>=1.0.0",
+    "ollama>=0.1.0",
+    "feedparser>=6.0.10",
+    "praw>=7.7.0",
+    "httpx>=0.26.0",
+    "rich>=13.7.0",
+    "loguru>=0.7.2",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "pandas>=2.1.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "python-dotenv>=1.0.0",
+    "aiofiles>=23.2.0",
+    "tenacity>=8.2.3",
+    "orjson>=3.9.10",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "websockets>=12.0",
+]
+
+[project.scripts]
+run-agent = "scripts.run_agent:main"
+run-backtest = "scripts.run_backtest:main"
+run-demo = "scripts.demo_event:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "scripts"]

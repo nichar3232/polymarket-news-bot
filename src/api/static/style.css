@@ -1,0 +1,412 @@
+/* ============================================================
+   Polymarket News Bot — Dashboard
+   Terminal-style trading UI
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0b0d13;
+  --surface:   #111520;
+  --border:    #1e2435;
+  --border-hi: #2a3352;
+  --text:      #c8cdd8;
+  --text-dim:  #5a6380;
+  --text-hi:   #e8ecf4;
+  --green:     #00e676;
+  --green-dim: #00b359;
+  --red:       #ff4757;
+  --red-dim:   #cc2233;
+  --cyan:      #00d2ff;
+  --yellow:    #ffd166;
+  --purple:    #a78bfa;
+  --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --sans:      'Inter', -apple-system, sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+/* ---- Topbar ------------------------------------------------ */
+.topbar {
+  height: 40px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+  margin-right: 10px;
+}
+
+.mode-badge {
+  background: #1a2a1a;
+  color: var(--green);
+  border: 1px solid var(--green-dim);
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.mode-badge.live {
+  background: #2a1a1a;
+  color: var(--red);
+  border-color: var(--red-dim);
+}
+
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.stat-val {
+  color: var(--text-hi);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.ws-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+.ws-indicator.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.ws-indicator.error     { background: var(--red); }
+
+/* ---- Main grid -------------------------------------------- */
+main.grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  gap: 1px;
+  height: calc(100vh - 40px);
+  margin-top: 40px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.panel {
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-wide { overflow-y: auto; }
+
+.panel-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-note {
+  font-weight: 400;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+/* ---- Portfolio stats -------------------------------------- */
+.portfolio-stats { display: flex; flex-direction: column; gap: 3px; }
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  border-bottom: 1px solid #0f1218;
+}
+
+.stat-row .label { color: var(--text-dim); font-size: 11px; }
+.stat-row span:last-child { color: var(--text-hi); font-size: 12px; }
+
+/* ---- Tables ----------------------------------------------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.data-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #0d1018;
+  vertical-align: middle;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table tbody tr:hover { background: #0f1520; cursor: pointer; }
+.data-table tbody tr.selected { background: #131a2a; }
+
+.empty-row {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 20px 0 !important;
+  font-style: italic;
+}
+
+/* ---- Value colors ----------------------------------------- */
+.pos  { color: var(--green); }
+.neg  { color: var(--red); }
+.neu  { color: var(--text-dim); }
+.hl   { color: var(--cyan); }
+.warn { color: var(--yellow); }
+
+.val-neutral { color: var(--text-hi); }
+
+/* ---- Direction badges ------------------------------------- */
+.badge {
+  display: inline-block;
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.badge-yes  { background: #0d2a1a; color: var(--green); border: 1px solid var(--green-dim); }
+.badge-no   { background: #2a0d10; color: var(--red);   border: 1px solid var(--red-dim); }
+.badge-none { background: #1a1a1a; color: var(--text-dim); border: 1px solid var(--border); }
+
+/* ---- Signal breakdown panel ------------------------------- */
+.signal-breakdown {
+  border: 1px solid var(--border-hi);
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.signal-breakdown.hidden { display: none; }
+
+.breakdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.close-btn:hover { color: var(--red); }
+
+.signal-row {
+  display: grid;
+  grid-template-columns: 160px 60px 60px 60px 1fr;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #0d1018;
+  font-size: 11px;
+  align-items: center;
+}
+
+.signal-row .s-source { color: var(--text-dim); font-size: 10px; }
+
+.lr-bar-wrap {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.lr-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+/* ---- Bayesian arrow viz ----------------------------------- */
+.bayesian-viz {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #0b0f1a;
+  border-radius: 4px;
+}
+
+.prob-block {
+  text-align: center;
+  min-width: 60px;
+}
+
+.prob-label { font-size: 10px; color: var(--text-dim); }
+.prob-value { font-size: 20px; font-weight: 700; }
+
+.arrow-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.arrow-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.arrow-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  transition: all 0.4s ease;
+}
+
+.arrow-label { font-size: 10px; color: var(--text-dim); }
+
+/* ---- Chart ------------------------------------------------ */
+.chart-wrap {
+  height: 120px;
+  position: relative;
+}
+
+/* ---- Activity log ----------------------------------------- */
+.log-wrap {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log-entry {
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-left: 2px solid transparent;
+  word-break: break-word;
+}
+
+.log-entry.trade   { border-color: var(--green);  background: #0a1a0f; color: var(--green); }
+.log-entry.cycle   { border-color: var(--border);  color: var(--text-dim); }
+.log-entry.wikipedia_spike { border-color: var(--yellow); background: #1a160a; color: var(--yellow); }
+.log-entry.error   { border-color: var(--red);    background: #1a0a0a; color: var(--red); }
+.log-entry.info    { border-color: var(--cyan);   background: #0a131a; color: var(--text); }
+
+.log-ts {
+  color: var(--text-dim);
+  font-size: 10px;
+  margin-right: 6px;
+}
+
+.log-empty {
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 24px;
+  font-style: italic;
+}
+
+.clear-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: var(--mono);
+}
+.clear-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+/* ---- Scrollbar -------------------------------------------- */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4460; }
+
+/* ---- Probability meter in market table ------------------- */
+.prob-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.meter-track {
+  width: 40px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--cyan);
+}
