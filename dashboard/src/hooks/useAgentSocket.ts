@@ -115,8 +115,11 @@ export function useAgentSocket() {
         dispatch({ type: 'connected', value: false })
         if (closed) return
         retriesRef.current++
-        if (retriesRef.current >= 3) {
+        if (retriesRef.current >= 10) {
+          // Bug 2 fix: show demo data after 10 retries (~30s) instead of 3 (~7s)
           dispatch({ type: 'demo' })
+          // Keep retrying in the background — if backend comes back, snapshot clears demoMode
+          setTimeout(connect, 15000)
         } else {
           setTimeout(connect, Math.min(1000 * 2 ** retriesRef.current, 8000))
         }

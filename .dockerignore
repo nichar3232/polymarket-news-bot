@@ -1,0 +1,25 @@
+# Dashboard build artifacts (~200MB) — not needed in container (Bug 15 fix)
+dashboard/node_modules
+dashboard/.vite
+dashboard/dist
+
+# Python bytecode
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# VCS
+.git
+.gitignore
+
+# Logs & data
+*.log
+logs/

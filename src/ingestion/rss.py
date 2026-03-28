@@ -21,21 +21,29 @@ from src.ingestion.metrics import ingestion_metrics
 
 
 RSS_FEEDS: list[tuple[str, str]] = [
-    ("reuters_world",     "https://feeds.reuters.com/reuters/worldNews"),
-    ("reuters_politics",  "https://feeds.reuters.com/Reuters/PoliticsNews"),
-    ("reuters_business",  "https://feeds.reuters.com/reuters/businessNews"),
-    ("ap_top_news",       "https://feeds.apnews.com/rss/apf-topnews"),
-    ("bbc_world",         "http://feeds.bbci.co.uk/news/world/rss.xml"),
-    ("bbc_business",      "http://feeds.bbci.co.uk/news/business/rss.xml"),
-    ("cnn_top",           "http://rss.cnn.com/rss/edition.rss"),
+    # Tier-1 global news
+    ("bbc",               "https://feeds.bbci.co.uk/news/rss.xml"),
+    ("aljazeera",         "https://www.aljazeera.com/xml/rss/all.xml"),
+    ("abc_news",          "https://feeds.abcnews.com/abcnews/topstories"),
+    ("pbs_newshour",      "https://www.pbs.org/newshour/feeds/rss/headlines"),
+    ("axios",             "https://api.axios.com/feed/"),
     ("guardian_world",    "https://www.theguardian.com/world/rss"),
     ("guardian_politics", "https://www.theguardian.com/politics/rss"),
     ("guardian_business", "https://www.theguardian.com/business/rss"),
+    ("guardian_tech",     "https://www.theguardian.com/technology/rss"),
     ("npr_news",          "https://feeds.npr.org/1001/rss.xml"),
-    ("ft_markets",        "https://www.ft.com/rss/home/uk"),
+    ("npr_politics",      "https://feeds.npr.org/1014/rss.xml"),
+    # Politics
     ("politico",          "https://www.politico.com/rss/politicopicks.xml"),
+    ("the_hill",          "https://thehill.com/rss/syndicator/19110/"),
+    # Finance / markets
     ("wsj_world",         "https://feeds.a.dj.com/rss/RSSWorldNews.xml"),
-    ("nyt_world",         "https://rss.nytimes.com/services/xml/rss/nyt/World.rss"),
+    ("ft",                "https://www.ft.com/rss/home"),
+    ("bloomberg",         "https://feeds.bloomberg.com/markets/news.rss"),
+    ("cnbc",              "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("marketwatch",       "https://feeds.marketwatch.com/marketwatch/topstories/"),
+    # Tech
+    ("techcrunch",        "https://techcrunch.com/feed/"),
 ]
 
 
@@ -136,9 +144,11 @@ class RSSMonitor:
                     self._seen.add(item.item_id)
                     new_items.append(item)
 
-        # Prevent unbounded growth
+        # Prevent unbounded growth — sets are unordered, so slice-on-list is arbitrary (Bug 11 fix)
+        # Simply drop half the entries when limit hit; dedup correctness doesn't require ordering
         if len(self._seen) > 50_000:
-            self._seen = set(list(self._seen)[-25_000:])
+            items_list = list(self._seen)
+            self._seen = set(items_list[len(items_list) // 2:])
 
         elapsed_ms = (time.time() - t0) * 1000
         ingestion_metrics.source("rss").record_fetch(elapsed_ms, items=len(new_items))

@@ -54,14 +54,24 @@ def _safe_json(obj) -> str:
 app = FastAPI(title="Polymarket News Bot", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# Serve the built React dashboard if it exists, otherwise redirect to dev server
+DASHBOARD_DIST = Path(__file__).resolve().parent.parent.parent / "dashboard" / "dist"
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard() -> HTMLResponse:
-    index = STATIC_DIR / "index.html"
-    return HTMLResponse(content=index.read_text())
+async def root() -> HTMLResponse:
+    index = DASHBOARD_DIST / "index.html"
+    if index.exists():
+        return HTMLResponse(content=index.read_text())
+    return HTMLResponse(
+        content='<meta http-equiv="refresh" content="0;url=http://localhost:3000">'
+        '<p>Redirecting to <a href="http://localhost:3000">dashboard dev server</a>...</p>'
+    )
+
+
+# Serve built static assets (JS/CSS bundles)
+if DASHBOARD_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(DASHBOARD_DIST / "assets")), name="assets")
 
 
 @app.get("/api/state")

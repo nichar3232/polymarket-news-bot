@@ -4,6 +4,7 @@ Standalone dashboard server.
 Starts only the web dashboard at http://localhost:8080
 without running the agent. Fetches REAL Polymarket markets
 at startup and runs live signal simulation against them.
+News and Wikipedia data are fetched from live sources — no hardcoded content.
 """
 from __future__ import annotations
 
@@ -22,6 +23,8 @@ import aiohttp
 from src.api.state import agent_state
 from src.fusion.bayesian import BayesianFusion, SignalUpdate
 from src.risk.portfolio import PortfolioManager, Position
+from src.ingestion.rss import RSSMonitor
+from src.ingestion.wikipedia import WikipediaEditMonitor
 from config.settings import settings
 
 GAMMA_REST = "https://gamma-api.polymarket.com"
@@ -120,8 +123,8 @@ def generate_signals_for_market(prior: float) -> list[SignalUpdate]:
     return signals
 
 
-async def seed_demo_state() -> None:
-    """Populate agent_state — fetches real Polymarket data."""
+async def seed_demo_state(session: aiohttp.ClientSession) -> None:
+    """Populate agent_state — fetches real Polymarket data and live news."""
     agent_state.trading_mode = "paper"
     agent_state.started_at = time.time() - 5400
 
@@ -191,21 +194,28 @@ async def seed_demo_state() -> None:
 
     agent_state.portfolio = pm.state
 
-    # Events
+    # Fetch REAL live news from RSS feeds
+    print("  Fetching live news from RSS feeds...")
+    try:
+        rss = RSSMonitor(poll_interval=60)
+        live_news = await rss.poll_once(session)
+        live_news_sorted = sorted(live_news, key=lambda x: x.published, reverse=True)
+        count = 0
+        for item in live_news_sorted:
+            if not item.title:
+                continue
+            agent_state.push_news(title=item.title, source=item.feed_name, relevance=random.uniform(0.3, 0.85))
+            count += 1
+            if count >= 20:
+                break
+        print(f"  Loaded {count} live news articles from RSS")
+    except Exception as e:
+        print(f"  Warning: Could not fetch live news ({e})")
+
+    # Activity events
     agent_state.push_event("info", f"Agent started with $1,000.00 | Model v2 | {len(live_markets)} live markets")
     agent_state.push_event("cycle", f"Cycle 1: evaluating {len(live_markets)} markets")
     agent_state.push_event("info", f"Skipped {len(live_markets) - 2} markets: edge < 5% threshold")
-
-    # News
-    demo_news = [
-        ("Markets rally on positive economic data", "reuters", 0.72),
-        ("Fed officials signal cautious approach to rate decisions", "wsj", 0.68),
-        ("Crypto markets see increased institutional participation", "coindesk", 0.55),
-        ("Geopolitical tensions ease as diplomatic talks progress", "bbc_news", 0.48),
-        ("Tech earnings beat expectations across the sector", "cnbc", 0.62),
-    ]
-    for title, source, relevance in demo_news:
-        agent_state.push_news(title=title, source=source, relevance=relevance)
 
     agent_state.tracked_markets = [
         {"id": m["id"], "question": m["question"], "price_yes": m["prior"]}
@@ -216,86 +226,86 @@ async def seed_demo_state() -> None:
     print(f"  Portfolio: ${pm.state.total_value:.2f} (base $1,000)")
 
 
-async def live_simulation() -> None:
-    """Continuously generate realistic agent activity against real markets."""
+async def live_simulation(session: aiohttp.ClientSession) -> None:
+    """Fetch real news and Wikipedia data continuously; simulate agent cycles."""
     cycle = 16
-    news_pool = [
-        ("reuters", [
-            "EU trade officials respond to tariff threats with counter-proposals",
-            "US Treasury yields rise on stronger-than-expected jobs data",
-            "OPEC+ agrees to extend production cuts through Q3",
-            "IMF raises global growth forecast to 3.2% for 2026",
-            "US-China trade talks resume in Geneva next week",
-            "Fed Governor signals patience on rate decisions amid mixed data",
-        ]),
-        ("wsj", [
-            "Corporate earnings beat expectations for third straight quarter",
-            "Housing starts fall 4.2% as mortgage rates hold above 6%",
-            "Tech sector leads market rally on AI infrastructure spending",
-            "Bond market signals growing recession concerns",
-            "Private equity firms increase bets on prediction markets",
-        ]),
-        ("coindesk", [
-            "Bitcoin mining difficulty reaches all-time high",
-            "Ethereum staking yields compress as participation grows",
-            "Institutional crypto custody assets exceed $200B",
-            "SEC approves two new spot crypto ETF applications",
-            "Bitcoin hash rate hits record following halving adjustment",
-        ]),
-        ("bbc_news", [
-            "G7 leaders to discuss Ukraine reconstruction framework",
-            "European Parliament debates AI safety legislation",
-            "Climate summit produces new emissions reduction targets",
-            "NATO defense spending hits 2.5% GDP average across alliance",
-        ]),
-        ("cnbc", [
-            "Nvidia revenue guidance exceeds analyst expectations",
-            "Apple announces $110B share buyback program",
-            "Retail sales rise 0.6% beating consensus estimates",
-            "Small cap stocks outperform large caps for first time in months",
-        ]),
-        ("ft", [
-            "Bank of Japan holds rates steady, signals future tightening",
-            "European banks report strong Q1 trading revenue",
-            "Sovereign wealth funds increase allocation to alternatives",
-        ]),
-    ]
-
-    # Use whatever markets were loaded (real or fallback)
     market_ids = [a.market_id for a in agent_state.recent_analyses]
     if not market_ids:
         return
 
     bayesian = BayesianFusion()
+    rss = RSSMonitor(poll_interval=60)
+
+    # Wikipedia monitor — track pages related to market questions
+    wiki_pages = [
+        "Federal_Reserve", "United_States_tariffs", "Bitcoin",
+        "Ukraine", "Artificial_intelligence", "Donald_Trump",
+        "European_Union", "NVIDIA", "United_States_Congress",
+    ]
+    wiki_monitor = WikipediaEditMonitor(pages_of_interest=wiki_pages)
+
+    last_rss_fetch = 0.0
+    last_wiki_fetch = 0.0
 
     while True:
         await asyncio.sleep(random.uniform(4, 8))
+
+        now = time.time()
 
         # Push a cycle event
         agent_state.push_event("cycle", f"Cycle {cycle}: evaluating {len(market_ids)} markets")
         cycle += 1
 
-        # Randomly push news articles
-        for _ in range(random.randint(1, 3)):
-            await asyncio.sleep(random.uniform(1, 3))
-            source, headlines = random.choice(news_pool)
-            title = random.choice(headlines)
-            relevance = random.uniform(0.25, 0.85)
-            agent_state.push_news(title=title, source=source, relevance=relevance)
+        # Fetch real RSS news every ~60 seconds
+        if now - last_rss_fetch >= 60:
+            last_rss_fetch = now
+            try:
+                news_items = await rss.poll_once(session)
+                if news_items:
+                    recent = sorted(news_items, key=lambda x: x.published, reverse=True)[:8]
+                    for item in recent:
+                        if item.title:
+                            agent_state.push_news(
+                                title=item.title,
+                                source=item.feed_name,
+                                relevance=random.uniform(0.25, 0.85),
+                            )
+                    # Unique source names for the activity event
+                    sources = list(dict.fromkeys(item.feed_name for item in recent))[:3]
+                    agent_state.push_event(
+                        "info",
+                        f"RSS: {len(news_items)} new articles from {', '.join(sources)}",
+                    )
+            except Exception:
+                pass
 
-        # Push info events
-        await asyncio.sleep(random.uniform(1, 2))
-        n_articles = random.randint(2, 6)
-        sources = random.sample(["Reuters", "WSJ", "AP", "BBC", "CNBC", "FT"], min(3, n_articles))
-        agent_state.push_event("info", f"RSS: {n_articles} new articles from {', '.join(sources)}")
+        # Fetch real Wikipedia recent changes every ~120 seconds
+        if now - last_wiki_fetch >= 120:
+            last_wiki_fetch = now
+            try:
+                edits = await wiki_monitor._fetch_recent_changes(session, minutes_back=3)
+                wiki_monitor._record_edits(edits)
+                for page in wiki_pages:
+                    signal = wiki_monitor.compute_velocity(page)
+                    if signal.is_spiking:
+                        agent_state.push_event(
+                            "wikipedia_spike",
+                            f"Wikipedia spike: '{page}' -- {signal.edits_last_5min} edits/5min "
+                            f"({signal.velocity_score:.1f}x baseline)",
+                        )
+            except Exception:
+                pass
+
+        # Occasionally skip markets (shows selectivity)
+        if random.random() < 0.4:
+            skipped = random.randint(2, 4)
+            agent_state.push_event("info", f"Skipped {skipped} markets: edge < 5% threshold")
 
         # Re-evaluate a random market with slightly shifted signals
-        await asyncio.sleep(random.uniform(1, 3))
         mid = random.choice(market_ids)
         existing = [a for a in agent_state.recent_analyses if a.market_id == mid]
         if existing:
             a = existing[0]
-            # Slightly shift signals
             new_signals = []
             for sig_dict in a.signals:
                 lr = sig_dict["lr"] * random.uniform(0.92, 1.08)
@@ -310,20 +320,6 @@ async def live_simulation() -> None:
             result = bayesian.fuse(mid, a.prior, new_signals)
             agent_state.push_result(result, a.question)
 
-        # Occasionally skip markets (shows selectivity)
-        if random.random() < 0.4:
-            skipped = random.randint(2, 4)
-            agent_state.push_event("info", f"Skipped {skipped} markets: edge < 5% threshold")
-
-        # Rare wikipedia spike
-        if random.random() < 0.15:
-            pages = ["Federal_Reserve", "EU-US_trade", "Bitcoin", "Ukraine_peace", "NVIDIA"]
-            page = random.choice(pages)
-            edits = random.randint(4, 9)
-            vel = round(random.uniform(2.5, 5.0), 1)
-            agent_state.push_event("wikipedia_spike",
-                f"Wikipedia spike: '{page}' -- {edits} edits/5min ({vel}x baseline)")
-
         # Update portfolio value slightly (prices drift)
         s = agent_state.portfolio
         if s:
@@ -334,15 +330,16 @@ async def live_simulation() -> None:
 
 
 async def main() -> None:
-    await seed_demo_state()
+    async with aiohttp.ClientSession() as session:
+        await seed_demo_state(session)
 
-    from src.api.server import start_api_server
-    print("\n  Polymarket News Bot - Dashboard (live data)")
-    print("  -------------------------------------------")
-    await asyncio.gather(
-        start_api_server(),
-        live_simulation(),
-    )
+        from src.api.server import start_api_server
+        print("\n  Polymarket News Bot - Dashboard (live data)")
+        print("  -------------------------------------------")
+        await asyncio.gather(
+            start_api_server(),
+            live_simulation(session),
+        )
 
 
 if __name__ == "__main__":

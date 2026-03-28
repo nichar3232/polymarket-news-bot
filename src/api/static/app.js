@@ -7,6 +7,67 @@
 
 'use strict';
 
+// ── Theme ──────────────────────────────────────────────────────────────────
+
+function getTheme() {
+  return localStorage.getItem('pm-theme') || 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.textContent = theme === 'light' ? '\u2600' : '\u263E';
+  // Rebuild charts with correct colors on next render
+  updateChartColors();
+}
+
+function toggleTheme() {
+  const current = getTheme();
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('pm-theme', next);
+  applyTheme(next);
+}
+
+function chartColors() {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    grid:     s.getPropertyValue('--chart-grid').trim() || '#2a2d35',
+    tick:     s.getPropertyValue('--chart-tick').trim() || '#5c5f6a',
+    tipBg:    s.getPropertyValue('--chart-tooltip-bg').trim() || '#16181d',
+    tipBorder:s.getPropertyValue('--chart-tooltip-border').trim() || '#3a3d47',
+    bg:       s.getPropertyValue('--bg').trim() || '#0c0d10',
+  };
+}
+
+function updateChartColors() {
+  const c = chartColors();
+  if (pnlChart) {
+    pnlChart.options.scales.y.grid.color = c.grid;
+    pnlChart.options.scales.y.ticks.color = c.tick;
+    pnlChart.options.plugins.tooltip.backgroundColor = c.tipBg;
+    pnlChart.options.plugins.tooltip.borderColor = c.tipBorder;
+    pnlChart.update('none');
+  }
+  if (radarChart) {
+    radarChart.options.scales.r.grid.color = c.grid;
+    radarChart.options.scales.r.angleLines.color = c.grid;
+    radarChart.options.scales.r.ticks.color = c.tick;
+    radarChart.options.scales.r.ticks.backdropColor = 'transparent';
+    radarChart.options.plugins.tooltip.backgroundColor = c.tipBg;
+    radarChart.options.plugins.tooltip.borderColor = c.tipBorder;
+    radarChart.update('none');
+  }
+  if (calibrationChart) {
+    calibrationChart.options.scales.x.ticks.color = c.tick;
+    calibrationChart.options.scales.y.grid.color = c.grid;
+    calibrationChart.options.scales.y.ticks.color = c.tick;
+    calibrationChart.options.plugins.legend.labels.color = c.tick;
+    calibrationChart.options.plugins.tooltip.backgroundColor = c.tipBg;
+    calibrationChart.options.plugins.tooltip.borderColor = c.tipBorder;
+    calibrationChart.update('none');
+  }
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 const state = {
@@ -778,8 +839,11 @@ function pushNewsItem(item) {
 
 function renderNewsFeed() {
   const feed = document.getElementById('news-feed');
+  const feedLeft = document.getElementById('news-feed-left');
   const countEl = document.getElementById('news-count');
+  const countLeftEl = document.getElementById('news-count-left');
   if (countEl) countEl.textContent = `${state.news.length} articles`;
+  if (countLeftEl) countLeftEl.textContent = `${state.news.length}`;
 
   if (!state.news.length) {
     feed.innerHTML = `<div class="news-empty">
@@ -792,7 +856,7 @@ function renderNewsFeed() {
     return;
   }
 
-  feed.innerHTML = state.news.slice(0, 50).map(n => {
+  const buildItems = (items) => items.map(n => {
     const relCls = relevanceClass(n.relevance);
     const relLabel = relevanceLabel(n.relevance);
     const sourceName = (n.source || 'RSS').replace(/_/g, ' ');
@@ -805,6 +869,9 @@ function renderNewsFeed() {
       <div class="news-title">${n.title}</div>
     </div>`;
   }).join('');
+
+  feed.innerHTML = buildItems(state.news.slice(0, 50));
+  if (feedLeft) feedLeft.innerHTML = buildItems(state.news.slice(0, 8));
 }
 
 function updateNewsTicker() {
@@ -944,6 +1011,7 @@ function set(id, html) {
 // ── Init ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(getTheme());
   initChart();
   initRadarChart();
   initCalibrationChart();

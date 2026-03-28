@@ -69,15 +69,20 @@ class CalibrationTracker:
             if in_bucket:
                 avg_predicted = sum(r.predicted_prob for r in in_bucket) / len(in_bucket)
                 avg_actual = sum(r.actual_outcome for r in in_bucket) / len(in_bucket)
+                buckets.append({
+                    "bucket": f"{int(lo*100)}-{int(hi*100)}%",
+                    "predicted": round(avg_predicted, 3),
+                    "actual": round(avg_actual, 3),
+                    "n": len(in_bucket),
+                })
             else:
-                avg_predicted = (lo + hi) / 2
-                avg_actual = 0.0
-            buckets.append({
-                "bucket": f"{int(lo*100)}-{int(hi*100)}%",
-                "predicted": round(avg_predicted, 3),
-                "actual": round(avg_actual, 3),
-                "n": len(in_bucket),
-            })
+                # Empty bucket — use None so dashboard can show "—" instead of misleading 0.0 (Bug 13 fix)
+                buckets.append({
+                    "bucket": f"{int(lo*100)}-{int(hi*100)}%",
+                    "predicted": round((lo + hi) / 2, 3),
+                    "actual": None,
+                    "n": 0,
+                })
         return buckets
 
     def to_dict(self) -> dict:

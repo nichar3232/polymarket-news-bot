@@ -89,6 +89,7 @@ class PaperTrader:
             size_usd=size_usd,
             entry_price=fill_price,
             order_id=order_id,
+            close_price=current_price,   # close opposing positions at pre-slippage price (Bug 9 fix)
         )
 
         if position:

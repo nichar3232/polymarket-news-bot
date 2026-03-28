@@ -4,67 +4,61 @@ import './panels.css'
 export function PortfolioPanel() {
   const { state } = useAgent()
   const p = state.portfolio
-
-  const rows = [
-    { label: 'Total Value', value: `$${p.total_value.toFixed(2)}`, color: 'var(--text)' },
-    { label: 'Cash', value: `$${p.cash.toFixed(2)}`, color: 'var(--text-mid)' },
-    { label: 'Exposure', value: `$${p.exposure_usd.toFixed(2)}`, color: 'var(--amber)' },
-    { label: 'Exposure %', value: `${p.exposure_pct.toFixed(1)}%`, color: p.exposure_pct > 15 ? 'var(--amber)' : 'var(--text-mid)' },
-    { label: 'Fees Paid', value: `$${p.fees_paid.toFixed(2)}`, color: 'var(--text-dim)' },
-  ]
-
-  const maxExposure = 20
+  const pnlColor = p.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
+  const maxExposure = 25
   const exposurePct = Math.min(p.exposure_pct / maxExposure * 100, 100)
 
   return (
     <div className="panel">
-      <div className="panel-title">Risk Management</div>
-      <div className="kv-grid">
-        {rows.map(r => (
-          <div key={r.label} className="kv-row">
-            <span className="kv-label">{r.label}</span>
-            <span className="kv-value" style={{ color: r.color }}>{r.value}</span>
-          </div>
-        ))}
+      <div className="panel-title">Portfolio</div>
+
+      <div className="pf-hero">
+        <span className="pf-hero-value">${p.total_value.toFixed(2)}</span>
+        <span className="pf-hero-pnl" style={{ color: pnlColor }}>
+          {p.total_pnl >= 0 ? '+' : ''}{p.total_pnl.toFixed(2)} ({p.total_pnl_pct >= 0 ? '+' : ''}{p.total_pnl_pct.toFixed(2)}%)
+        </span>
       </div>
-      <div className="exposure-bar-container">
-        <div className="exposure-bar-label">
-          <span>EXPOSURE</span>
+
+      <div className="pf-grid">
+        <div className="pf-cell">
+          <span className="pf-cell-label">Cash</span>
+          <span className="pf-cell-value">${p.cash.toFixed(2)}</span>
+        </div>
+        <div className="pf-cell">
+          <span className="pf-cell-label">Exposure</span>
+          <span className="pf-cell-value">${p.exposure_usd.toFixed(2)}</span>
+        </div>
+        <div className="pf-cell">
+          <span className="pf-cell-label">Fees</span>
+          <span className="pf-cell-value">${p.fees_paid.toFixed(2)}</span>
+        </div>
+        <div className="pf-cell">
+          <span className="pf-cell-label">Exposure %</span>
+          <span className="pf-cell-value">{p.exposure_pct.toFixed(1)}%</span>
+        </div>
+      </div>
+
+      <div className="pf-bar">
+        <div className="pf-bar-header">
+          <span>RISK UTILIZATION</span>
           <span>{p.exposure_pct.toFixed(1)}% / {maxExposure}%</span>
         </div>
-        <div className="exposure-bar-track">
+        <div className="pf-bar-track">
           <div
-            className="exposure-bar-fill"
+            className="pf-bar-fill"
             style={{
               width: `${exposurePct}%`,
-              background: exposurePct > 80 ? 'var(--rose)' : exposurePct > 50 ? 'var(--amber)' : 'var(--green)',
+              background: exposurePct > 80 ? 'var(--red)' : exposurePct > 50 ? 'var(--yellow)' : 'var(--green)',
             }}
           />
         </div>
       </div>
-      <div className="safeguards">
-        <div className="safeguard-row">
-          <span className="safeguard-icon ok">&#10003;</span>
-          <span>Max Position: $30.00</span>
-        </div>
-        <div className="safeguard-row">
-          <span className={`safeguard-icon ${p.exposure_pct < maxExposure ? 'ok' : 'warn'}`}>
-            {p.exposure_pct < maxExposure ? '\u2713' : '\u26A0'}
-          </span>
-          <span>Portfolio Cap: {maxExposure}%</span>
-        </div>
-        <div className="safeguard-row">
-          <span className="safeguard-icon ok">&#10003;</span>
-          <span>Min Edge: 5.0%</span>
-        </div>
-        <div className="safeguard-row">
-          <span className="safeguard-icon ok">&#10003;</span>
-          <span>Min Signals: 3</span>
-        </div>
-        <div className="safeguard-row">
-          <span className="safeguard-icon ok">&#10003;</span>
-          <span>Kelly Fraction: 0.25x</span>
-        </div>
+
+      <div className="pf-limits">
+        <div className="pf-limit"><span className="pf-limit-label">Max Position</span><span className="pf-limit-value">$50</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Min Edge</span><span className="pf-limit-value">2.0%</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Min Signals</span><span className="pf-limit-value">2</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Kelly Frac.</span><span className="pf-limit-value">0.25×</span></div>
       </div>
     </div>
   )

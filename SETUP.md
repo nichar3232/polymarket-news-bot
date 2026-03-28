@@ -249,7 +249,7 @@ python scripts/demo_event.py
 python scripts/run_backtest.py
 
 # ── Test suite ────────────────────────────────────────────────────────────────
-pytest tests/ -v    # 36/36 should pass
+pytest tests/ -v    # 74/74 should pass
 ```
 
 ---

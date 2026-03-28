@@ -43,6 +43,50 @@
   --radius-sm: 4px;
   --radius-lg: 8px;
   --text:      var(--t2);
+  --chart-grid:#2a2d35;
+  --chart-tick:#5c5f6a;
+  --chart-tooltip-bg:#16181d;
+  --chart-tooltip-border:#3a3d47;
+}
+
+/* ── Light theme ─────────────────────────────────── */
+[data-theme="light"] {
+  --bg:        #f5f6f8;
+  --bg2:       #ffffff;
+  --surface:   #edeef1;
+  --border:    #d8dae0;
+  --border2:   #c4c6ce;
+  --t1:        #1a1c22;
+  --t2:        #4a4d57;
+  --t3:        #8b8e98;
+  --green:     #16a34a;
+  --red:       #dc2626;
+  --accent:    #6366f1;
+  --yellow:    #ca8a04;
+  --green-dim: #bbf7d0;
+  --red-dim:   #fecaca;
+  --green-glow:rgba(22,163,74,0.08);
+  --red-glow:  rgba(220,38,38,0.08);
+  --green-bg:  rgba(22,163,74,0.04);
+  --red-bg:    rgba(220,38,38,0.04);
+  --yellow-bg: rgba(202,138,4,0.04);
+  --yellow-dim:#92400e;
+  --yellow-glow:rgba(202,138,4,0.06);
+  --orange:    #d97706;
+  --orange-bg: rgba(217,119,6,0.04);
+  --cyan-glow: rgba(99,102,241,0.08);
+  --cyan-dim:  #818cf8;
+  --border-hi: var(--border2);
+  --bg-raised: var(--bg2);
+  --surface-hi:var(--surface);
+  --text-dim:  var(--t3);
+  --text-mid:  var(--t2);
+  --text-hi:   var(--t1);
+  --text:      var(--t2);
+  --chart-grid:#e5e7eb;
+  --chart-tick:#6b7280;
+  --chart-tooltip-bg:#ffffff;
+  --chart-tooltip-border:#d1d5db;
 }
 
 html, body {
@@ -242,8 +286,23 @@ main.grid {
 @keyframes flash-g { 0% { color: var(--green); } }
 @keyframes flash-r { 0% { color: var(--red); } }
 
+/* ── Theme toggle ────────────────────────────────── */
+.theme-toggle {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--t2);
+  cursor: pointer;
+  font-size: 14px;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── Charts ──────────────────────────────────────── */
-.chart-wrap { height: 80px; margin-bottom: 8px; }
+.chart-wrap { height: 140px; margin-bottom: 8px; }
 .radar-wrap {
   height: 240px;
   background: var(--bg2);
@@ -466,6 +525,7 @@ main.grid {
 
 /* ── News feed ───────────────────────────────────── */
 .news-feed { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.news-feed-left { max-height: 220px; flex: none; }
 .news-item {
   padding: 6px 8px; background: var(--bg2);
   border: 1px solid var(--border); border-radius: var(--r);

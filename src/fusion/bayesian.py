@@ -115,8 +115,8 @@ class BayesianFusion:
     """
 
     POLYMARKET_FEE = 0.02       # 2% fee on profits
-    MIN_EDGE = 0.05             # 5% minimum edge after fees (was 3%)
-    MIN_SIGNALS = 3             # require at least 3 signals to trade
+    MIN_EDGE = 0.02             # 2% minimum effective edge after fees
+    MIN_SIGNALS = 2             # require at least 2 independent signals to trade
 
     # Correlation groups: signals within a group share information and get
     # heavier damping when combined.  Signals across groups are more

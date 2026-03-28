@@ -93,6 +93,8 @@ def compute_kelly(
         p = 1 - posterior_prob
         q = 1 - p
         market_price_no = 1 - market_price_yes
+        if market_price_no <= 1e-6:   # defensive guard: price at/near 1 → undefined odds (Bug 8 fix)
+            return None
         b = market_price_yes / market_price_no
         b_net = b * (1 - fee)
 

@@ -36,6 +36,8 @@ class MarketSignalBundle:
     resolution: "ResolutionSignal | None" = None
     reddit_sentiment: float = 0.0           # -1.0 to +1.0
     wikipedia_velocity_lr: float = 1.0
+    gdelt_lr: float = 1.0                   # Aggregated GDELT sentiment LR (100+ sources)
+    gdelt_confidence: float = 0.0           # 0 = no data, >0 = active signal
 
 
 class EnsembleAggregator:
@@ -144,12 +146,30 @@ class EnsembleAggregator:
                 notes=f"Evidence found: {bundle.resolution.evidence_text[:80]}",
             ))
 
-        # 7. Reddit social sentiment — DISABLED
-        # Reddit sentiment at 0.35 confidence adds noise, not alpha.
-        # Keeping the field in MarketSignalBundle for future use if we
-        # build a better NLP pipeline.
+        # 7. Reddit social sentiment
+        if bundle.reddit_sentiment != 0.0:
+            import math as _math
+            reddit_lr = _math.exp(bundle.reddit_sentiment * 0.8)
+            reddit_lr = max(0.6, min(1.6, reddit_lr))
+            signals.append(SignalUpdate(
+                source="reddit_social",
+                likelihood_ratio=reddit_lr,
+                confidence=0.35,    # Reddit is noisy — intentionally low weight
+                raw_value=bundle.reddit_sentiment,
+                notes=f"Reddit sentiment={bundle.reddit_sentiment:+.2f}",
+            ))
 
-        # 8. Wikipedia velocity
+        # 8. GDELT GKG sentiment (100+ global news sources, tone-scored)
+        if bundle.gdelt_lr != 1.0 and bundle.gdelt_confidence > 0:
+            signals.append(SignalUpdate(
+                source="news_gdelt",
+                likelihood_ratio=max(0.5, min(2.0, bundle.gdelt_lr)),
+                confidence=min(bundle.gdelt_confidence, 0.65),
+                raw_value=bundle.gdelt_lr,
+                notes=f"GDELT GKG aggregate tone signal ({bundle.gdelt_confidence:.2f} conf)",
+            ))
+
+        # 9. Wikipedia velocity
         if bundle.wikipedia_velocity_lr != 1.0:
             signals.append(SignalUpdate(
                 source="wikipedia_velocity",

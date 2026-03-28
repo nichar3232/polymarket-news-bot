@@ -24,6 +24,7 @@ from config.settings import settings
 from src.ingestion.polymarket import PolymarketClient, MarketInfo
 from src.ingestion.rss import RSSMonitor, keyword_relevance_score
 from src.ingestion.wikipedia import WikipediaEditMonitor
+from src.ingestion.gdelt import fetch_latest_gdelt_gkg, score_gdelt_relevance, gdelt_tone_to_likelihood_ratio
 from src.signals.microstructure import MicrostructureAnalyzer
 from src.signals.cross_market import CrossMarketAnalyzer
 from src.signals.news_relevance import score_rss_item, NewsRelevanceScore
@@ -40,6 +41,7 @@ from src.monitor.dashboard import Dashboard
 from src.api.state import agent_state
 
 import aiohttp
+import math
 
 
 logger.remove()
@@ -107,6 +109,7 @@ class PolymarketAgent:
         self._tracked_markets: list[MarketInfo] = []
         self._market_keywords: dict[str, list[str]] = {}
         self._news_buffer: list[tuple[str, object, float, float]] = []  # (market_id, item, score, ts)
+        self._gdelt_buffer: dict[str, list] = {}  # market_id -> [(GDELTEvent, relevance, ts)]
         self._microstructure: dict[str, MicrostructureAnalyzer] = {}
         self._markets_ready = asyncio.Event()
 
@@ -143,28 +146,115 @@ class PolymarketAgent:
         self._markets_ready.set()
 
     async def _rss_task(self) -> None:
-        """Buffer relevant news for each tracked market."""
+        """Buffer relevant news for each tracked market and stream all articles to dashboard."""
         session = aiohttp.ClientSession()
         self._sessions.append(session)
         try:
-            monitor = RSSMonitor(poll_interval=60)
+            monitor = RSSMonitor(poll_interval=30)   # poll every 30s for low latency
             async for batch in monitor.stream(session=session):
-                # Wait until market keywords are available
                 await self._markets_ready.wait()
                 now = time.time()
-                for item in batch:
+                pushed_general = 0
+                # Sort by publication time — freshest first
+                sorted_batch = sorted(batch, key=lambda x: x.published, reverse=True)
+                for item in sorted_batch:
+                    if not item.title:
+                        continue
+                    best_score = 0.0
+                    best_market = ""
                     for market_id, keywords in self._market_keywords.items():
                         score = keyword_relevance_score(item, keywords)
+                        if score > best_score:
+                            best_score = score
+                            best_market = market_id
                         if score > 0.1:
                             self._news_buffer.append((market_id, item, score, now))
-                            agent_state.push_news(
-                                title=item.title,
-                                source=item.feed_name,
-                                relevance=score,
-                                market_id=market_id,
-                            )
+
+                    # Push to dashboard: market-relevant articles get full score,
+                    # top-5 general articles per batch always stream through
+                    if best_score > 0.1:
+                        agent_state.push_news(
+                            title=item.title,
+                            source=item.feed_name,
+                            relevance=best_score,
+                            market_id=best_market,
+                        )
+                    elif pushed_general < 5:
+                        agent_state.push_news(
+                            title=item.title,
+                            source=item.feed_name,
+                            relevance=0.0,
+                        )
+                        pushed_general += 1
+
                 if len(self._news_buffer) > 1000:
                     self._news_buffer = self._news_buffer[-1000:]
+        finally:
+            await session.close()
+
+    async def _gdelt_task(self) -> None:
+        """Fetch GDELT GKG every 15 minutes, buffer events per-market for Bayesian fusion,
+        and push high-relevance events as news items to the dashboard."""
+        await self._markets_ready.wait()
+        session = aiohttp.ClientSession()
+        self._sessions.append(session)
+        try:
+            while True:
+                try:
+                    # Prune stale buffer entries (older than 12 hours) before each fetch
+                    cutoff = time.time() - 43_200
+                    for mid in list(self._gdelt_buffer.keys()):
+                        self._gdelt_buffer[mid] = [
+                            (ev, rel, ts) for ev, rel, ts in self._gdelt_buffer[mid]
+                            if ts > cutoff
+                        ]
+
+                    events = await fetch_latest_gdelt_gkg(session)
+                    pushed = 0
+                    buffered = 0
+                    now = time.time()
+                    for event in events:
+                        if not event.source_url or not event.source_name:
+                            continue
+                        best_score = 0.0
+                        best_market = ""
+                        for market_id, keywords in self._market_keywords.items():
+                            score = score_gdelt_relevance(event, keywords)
+                            if score > best_score:
+                                best_score = score
+                                best_market = market_id
+
+                        if best_score >= 0.15 and best_market:
+                            # Buffer for Bayesian signal pipeline
+                            if best_market not in self._gdelt_buffer:
+                                self._gdelt_buffer[best_market] = []
+                            self._gdelt_buffer[best_market].append((event, best_score, now))
+                            # Cap per-market buffer at 50 entries
+                            if len(self._gdelt_buffer[best_market]) > 50:
+                                self._gdelt_buffer[best_market] = self._gdelt_buffer[best_market][-50:]
+                            buffered += 1
+
+                            # Push top 10 to dashboard news feed
+                            if pushed < 10:
+                                title = event.source_url.split("//")[-1].split("/")[-1].replace("-", " ").replace("_", " ")
+                                title = title[:80] if title else event.source_name
+                                tone_label = f"tone={event.tone:+.1f}"
+                                agent_state.push_news(
+                                    title=f"[GDELT] {title} ({tone_label})",
+                                    source=event.source_name[:20],
+                                    relevance=best_score,
+                                    market_id=best_market,
+                                )
+                                pushed += 1
+
+                    if pushed:
+                        agent_state.push_event(
+                            "info",
+                            f"GDELT: {pushed} events pushed to dashboard, {buffered} buffered for signal fusion",
+                        )
+                except Exception as e:
+                    logger.debug(f"GDELT task error: {e}")
+                await asyncio.sleep(900)   # 15 minutes
         finally:
             await session.close()
 
@@ -216,6 +306,7 @@ class PolymarketAgent:
 
         try:
             bundle = MarketSignalBundle(market_id=market_id, prior_price=prior_price)
+            orderbook = None
 
             # --- Microstructure ---
             analyzer = self._microstructure[market_id]
@@ -288,6 +379,21 @@ class PolymarketAgent:
             except Exception as e:
                 logger.debug(f"LLM decomposition failed for {market_id[:30]}: {e}")
 
+            # --- GDELT signal (aggregated from per-market buffer) ---
+            gdelt_events = self._gdelt_buffer.get(market_id, [])
+            fresh_gdelt = [(ev, rel, ts) for ev, rel, ts in gdelt_events if now - ts < 43_200]
+            if fresh_gdelt:
+                log_lr_sum = 0.0
+                weight_sum = 0.0
+                for ev, rel, _ in fresh_gdelt[-10:]:  # most recent 10 events
+                    lr = gdelt_tone_to_likelihood_ratio(ev.tone, rel)
+                    log_lr_sum += math.log(max(0.01, lr)) * rel
+                    weight_sum += rel
+                if weight_sum > 0:
+                    bundle.gdelt_lr = math.exp(log_lr_sum / weight_sum)
+                    # confidence scales with number of events; saturates at ~5 events
+                    bundle.gdelt_confidence = min(weight_sum / 5.0, 0.65)
+
             # --- Fuse ---
             result = self.ensemble.aggregate(bundle)
 
@@ -312,12 +418,12 @@ class PolymarketAgent:
                     market_price_yes=prior_price,
                     portfolio_value=self.portfolio.state.total_value,
                     kelly_fraction=settings.kelly_fraction,
-                    max_position_pct=0.05,
+                    max_position_pct=settings.max_position_pct_per_trade,
                     max_position_usd=settings.max_position_size_usd,
                 )
 
                 # Adjust for orderbook depth (market impact model)
-                if orderbook is not None:
+                if orderbook is not None and orderbook.bids and orderbook.asks:
                     book_depth = sum(s for _, s in orderbook.bids[:5]) + sum(s for _, s in orderbook.asks[:5])
                     adjusted_size = self.paper_trader.adjust_size_for_depth(
                         kelly.position_size_usd, book_depth
@@ -328,7 +434,7 @@ class PolymarketAgent:
                             market_price_yes=prior_price,
                             portfolio_value=self.portfolio.state.total_value,
                             kelly_fraction=settings.kelly_fraction,
-                            max_position_pct=0.05,
+                            max_position_pct=settings.max_position_pct_per_trade,
                             max_position_usd=min(settings.max_position_size_usd, adjusted_size),
                         )
 
@@ -408,6 +514,7 @@ class PolymarketAgent:
                         logger.warning(f"  {type(err).__name__}: {err}")
 
                 agent_state.portfolio = self.portfolio.state
+                agent_state.push_portfolio()   # broadcast to all WS clients (Bug 1 fix)
                 self.dashboard.update()
                 self.dashboard.log(self.portfolio.get_summary().splitlines()[0])
 
@@ -437,6 +544,7 @@ class PolymarketAgent:
                 asyncio.create_task(self._main_loop(), name="main_loop"),
                 asyncio.create_task(self._rss_task(), name="rss_task"),
                 asyncio.create_task(self._wikipedia_task(), name="wikipedia_task"),
+                asyncio.create_task(self._gdelt_task(), name="gdelt_task"),
             ]
             await asyncio.gather(*running_tasks, return_exceptions=True)
         except (KeyboardInterrupt, asyncio.CancelledError):

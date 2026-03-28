@@ -240,8 +240,10 @@ class GDELTMonitor:
                             await callback(market_id, event, relevance)
 
                 # Clean up old seen URLs to prevent unbounded memory growth
+                # Bug 11 fix: sets are unordered so list(set)[-N:] is arbitrary — just trim by half
                 if len(self._seen_urls) > 10_000:
-                    self._seen_urls = set(list(self._seen_urls)[-5_000:])
+                    urls_list = list(self._seen_urls)
+                    self._seen_urls = set(urls_list[len(urls_list) // 2:])
 
                 logger.info("GDELT cycle complete. Sleeping 15 minutes.")
                 await asyncio.sleep(15 * 60)

@@ -1,5 +1,4 @@
 import { useAgent } from '../../context/AgentContext'
-import { SIGNAL_DEFS } from '../../data/signalDefinitions'
 
 export function DecisionPanel() {
   const { state } = useAgent()
@@ -7,66 +6,45 @@ export function DecisionPanel() {
 
   if (!selected) return (
     <div className="panel">
-      <div className="panel-title">Decision Engine</div>
+      <div className="panel-title">Decision</div>
       <div className="no-data">Select a market</div>
     </div>
   )
 
   const dir = selected.trade_direction
-  const actionLabel = dir === 'NONE' ? 'HOLD' : `BUY ${dir}`
-  const actionClass = dir === 'YES' ? 'BUY-YES' : dir === 'NO' ? 'BUY-NO' : 'HOLD'
-
-  const topSignals = [...selected.signals]
-    .sort((a, b) => Math.abs(b.eff_lr - 1) - Math.abs(a.eff_lr - 1))
-    .slice(0, 3)
-
-  const rationale = dir !== 'NONE'
-    ? selected.effective_edge >= 0.10
-      ? 'High confidence mispricing detected'
-      : 'Edge above execution threshold'
-    : selected.effective_edge < 0.05
-      ? 'Edge below execution threshold'
-      : 'Signal quality insufficient'
+  const actionLabel = dir === 'NONE' ? 'HOLD' : dir
+  const edgeColor = selected.effective_edge >= 0.05 ? 'var(--green)' : selected.effective_edge > 0 ? 'var(--yellow)' : 'var(--text-dim)'
 
   return (
     <div className="panel">
-      <div className="panel-title">Decision Engine</div>
-      <div className="decision-flow">
-        <div className="decision-node">
-          <span className="decision-node-label">PRIOR</span>
-          <span className="decision-node-value" style={{ color: 'var(--text-mid)' }}>
-            {(selected.prior * 100).toFixed(1)}%
+      <div className="panel-title">Decision</div>
+      <div className="dec-market">{selected.question}</div>
+
+      <div className="dec-row">
+        <div className="dec-metric">
+          <span className="dec-label">Prior</span>
+          <span className="dec-val dim">{(selected.prior * 100).toFixed(1)}%</span>
+        </div>
+        <span className="dec-arrow">→</span>
+        <div className="dec-metric">
+          <span className="dec-label">Posterior</span>
+          <span className="dec-val">{(selected.posterior * 100).toFixed(1)}%</span>
+        </div>
+        <span className="dec-arrow">→</span>
+        <div className="dec-metric">
+          <span className="dec-label">Edge</span>
+          <span className="dec-val" style={{ color: edgeColor }}>
+            {selected.effective_edge >= 0 ? '+' : ''}{(selected.effective_edge * 100).toFixed(1)}%
           </span>
         </div>
-        <span className="decision-arrow">&rarr;</span>
-
-        {topSignals.map((s, i) => {
-          const def = SIGNAL_DEFS[s.source]
-          return (
-            <div key={i} className="decision-node" style={{ borderColor: def?.color ?? 'var(--border)', borderWidth: 1 }}>
-              <span className="decision-node-label">{def?.short ?? s.source}</span>
-              <span className="decision-node-value" style={{
-                fontSize: 12, color: s.eff_lr >= 1 ? 'var(--green)' : 'var(--rose)'
-              }}>
-                {s.eff_lr.toFixed(2)}
-              </span>
-            </div>
-          )
-        })}
-
-        <span className="decision-arrow">&rarr;</span>
-        <div className="decision-node">
-          <span className="decision-node-label">POST</span>
-          <span className="decision-node-value" style={{ color: 'var(--amber)' }}>
-            {(selected.posterior * 100).toFixed(1)}%
-          </span>
-        </div>
-        <span className="decision-arrow">&rarr;</span>
-        <div className={`decision-action ${actionClass}`}>
-          <span className="decision-action-label">{actionLabel}</span>
-        </div>
+        <span className="dec-arrow">→</span>
+        <span className={`badge lg ${dir}`}>{actionLabel}</span>
       </div>
-      <div className="decision-rationale">&quot;{rationale}&quot;</div>
+
+      <div className="dec-meta">
+        <span>90% CI: [{(selected.ci_lower * 100).toFixed(0)}%, {(selected.ci_upper * 100).toFixed(0)}%]</span>
+        <span>{selected.signal_count} signals</span>
+      </div>
     </div>
   )
 }

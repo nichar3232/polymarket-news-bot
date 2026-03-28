@@ -20,6 +20,9 @@
         <span class="ws-dot" id="ws-dot"></span>
         <span class="ws-label" id="ws-status">connecting...</span>
       </div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+        <span id="theme-icon">&#x263E;</span>
+      </button>
     </div>
 
     <div class="topbar-stats">
@@ -59,7 +62,7 @@
   <!-- ── Main grid ───────────────────────────────────────────── -->
   <main class="grid">
 
-    <!-- LEFT: Portfolio + Positions -->
+    <!-- LEFT: Portfolio + P&L + Positions + News -->
     <section class="panel" id="panel-portfolio">
       <div class="section-label">Portfolio</div>
       <div class="portfolio-cards">
@@ -78,6 +81,7 @@
         </div>
       </div>
 
+      <div class="section-label">P&amp;L</div>
       <div class="chart-wrap"><canvas id="pnl-chart"></canvas></div>
 
       <div class="section-label">Positions <span class="ph-count" id="position-count">0</span></div>
@@ -88,7 +92,12 @@
         </tbody>
       </table>
 
-      <div class="section-label" style="margin-top:12px">Calibration</div>
+      <div class="section-label" style="margin-top:8px">News <span class="ph-count" id="news-count-left">0</span></div>
+      <div class="news-feed news-feed-left" id="news-feed-left">
+        <div class="news-empty">Monitoring RSS feeds...</div>
+      </div>
+
+      <div class="section-label" style="margin-top:8px">Calibration</div>
       <div class="calibration-wrap"><canvas id="calibration-chart"></canvas></div>
     </section>
 

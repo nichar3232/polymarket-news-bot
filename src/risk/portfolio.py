@@ -138,8 +138,14 @@ class PortfolioManager:
         size_usd: float,
         entry_price: float,
         order_id: str = "",
+        close_price: float | None = None,
     ) -> Position | None:
-        """Record a new position."""
+        """Record a new position.
+
+        close_price: price used when closing an opposing position (flip).
+        If None, falls back to entry_price. Pass the pre-slippage market price
+        to avoid booking the new order's slippage as the exit price (Bug 9 fix).
+        """
         ok, reason = self.can_open_position(size_usd)
         if not ok:
             logger.warning(f"Cannot open position for {market_id}: {reason}")
@@ -149,7 +155,7 @@ class PortfolioManager:
         if market_id in self.state.positions:
             existing = self.state.positions[market_id]
             if existing.direction != direction:
-                self.close_position(market_id, entry_price)
+                self.close_position(market_id, close_price if close_price is not None else entry_price)
 
         position = Position(
             market_id=market_id,

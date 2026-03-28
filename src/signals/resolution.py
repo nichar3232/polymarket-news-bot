@@ -7,6 +7,7 @@ This lets us trade BEFORE Polymarket officially resolves.
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -177,13 +178,15 @@ class ResolutionMonitor:
                 elif n > y:
                     likely_yes = False
 
-        # Compute LR
+        # Compute LR — exponential scale to match other signals (Bug 5 fix)
+        # lr = exp(confidence * 2.0) gives max ≈7.4 at confidence=1.0, capped to [0.25, 4.0]
+        # Previous: linear 1 + confidence * 5.0 gave max 6.0 — breaks Bayesian calibration
         if not found_evidence:
             lr = 1.0
         elif likely_yes is True:
-            lr = 1.0 + confidence * 5.0   # Strong YES evidence → big update
+            lr = min(4.0, math.exp(confidence * 2.0))   # Strong YES evidence → big update
         elif likely_yes is False:
-            lr = 1.0 / (1.0 + confidence * 5.0)
+            lr = max(0.25, math.exp(-confidence * 2.0))
         else:
             lr = 1.0  # Found evidence but couldn't determine direction
 

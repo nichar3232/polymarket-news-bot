@@ -45,10 +45,11 @@ class Settings(BaseSettings):
     trading_mode: str = "paper"
 
     # Risk limits
-    max_position_size_usd: float = 30.0    # was 50 — smaller bets while model improves
-    max_portfolio_exposure: float = 0.20   # was 0.25
-    min_edge_threshold: float = 0.05       # was 0.03 — require stronger edge to trade
-    kelly_fraction: float = 0.15           # was 0.25 — less aggressive sizing
+    max_position_size_usd: float = 50.0
+    max_portfolio_exposure: float = 0.25
+    max_position_pct_per_trade: float = 0.05   # max single-position size as fraction of portfolio
+    min_edge_threshold: float = 0.02
+    kelly_fraction: float = 0.25
 
     # Agent behavior
     signal_refresh_seconds: int = 60
@@ -77,7 +78,14 @@ class Settings(BaseSettings):
 
     @property
     def has_polymarket_creds(self) -> bool:
-        return bool(self.polymarket_api_key and self.polymarket_private_key)
+        # All 5 fields required by CLOB SDK — partial creds cause silent init failures (Bug 6 fix)
+        return bool(
+            self.polymarket_api_key
+            and self.polymarket_api_secret
+            and self.polymarket_api_passphrase
+            and self.polymarket_private_key
+            and self.polymarket_funder_address
+        )
 
 
 settings = Settings()

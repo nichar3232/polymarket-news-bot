@@ -15,4 +15,4 @@ COPY . .
 # Web dashboard port
 EXPOSE 8080
 
-CMD ["python", "scripts/run_agent.py"]
+CMD ["python3.11", "scripts/run_agent.py"]
