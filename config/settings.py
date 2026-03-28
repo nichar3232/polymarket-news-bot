@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     polymarket_funder_address: str = ""
 
     # Polygon network
-    polygon_testnet: bool = True              # True = Amoy testnet, False = mainnet
+    # Note: TRADING_MODE controls execution network. In live mode, mainnet is always used.
+    polygon_testnet: bool = True              # Used by paper/sim helpers; testnet mode is explicit.
     polygon_rpc_url: str = "https://rpc-amoy.polygon.technology"
     clob_host: str = "https://clob.polymarket.com"
 
@@ -62,7 +63,11 @@ class Settings(BaseSettings):
 
     @property
     def is_testnet(self) -> bool:
-        return self.trading_mode == "testnet" or self.polygon_testnet
+        if self.trading_mode == "testnet":
+            return True
+        if self.trading_mode == "live":
+            return False
+        return self.polygon_testnet
 
     @property
     def chain_id(self) -> int:

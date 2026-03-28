@@ -1,10 +1,25 @@
 import { useEffect, useReducer, useCallback, useRef } from 'react'
-import type { AgentState, Analysis, AgentEvent, NewsItem, Portfolio } from '../types'
+import type { AgentState, AgentConfig, Analysis, AgentEvent, NewsItem, Portfolio } from '../types'
 import { MOCK_STATE } from '../data/mockSnapshot'
+
+const DEFAULT_CONFIG: AgentConfig = {
+  risk: {
+    max_position_usd: 50,
+    max_portfolio_exposure_pct: 25,
+    max_position_pct_per_trade: 5,
+    kelly_fraction: 0.25,
+  },
+  engine: {
+    polymarket_fee_pct: 2,
+    min_signals: 2,
+    min_effective_edge_pct: 2,
+  },
+}
 
 const INITIAL: AgentState = {
   trading_mode: 'paper',
   started_at: Date.now() / 1000,
+  config: DEFAULT_CONFIG,
   portfolio: { total_value: 0, starting_value: 0, cash: 0, total_pnl: 0, total_pnl_pct: 0, exposure_usd: 0, exposure_pct: 0, total_trades: 0, win_rate: 0, fees_paid: 0, sharpe_ratio: null, max_drawdown_pct: null, profit_factor: null, positions: [] },
   analyses: [],
   events: [],
@@ -36,6 +51,7 @@ function reducer(state: AgentState, action: Action): AgentState {
         ...state,
         trading_mode: d.trading_mode ?? state.trading_mode,
         started_at: d.started_at ?? state.started_at,
+        config: d.config ?? state.config ?? DEFAULT_CONFIG,
         portfolio: d.portfolio ?? state.portfolio,
         analyses,
         events: d.events ?? [],
@@ -65,6 +81,7 @@ function reducer(state: AgentState, action: Action): AgentState {
       return {
         ...state,
         ...MOCK_STATE,
+        config: state.config ?? DEFAULT_CONFIG,
         selectedMarketId: topEdge?.market_id ?? null,
         connected: false,
         demoMode: true,

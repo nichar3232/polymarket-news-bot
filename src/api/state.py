@@ -19,6 +19,26 @@ if TYPE_CHECKING:
     from src.risk.portfolio import PortfolioState
 
 
+def _agent_config_snapshot() -> dict:
+    """Config values the dashboard needs to render without hardcoded constants."""
+    from config.settings import settings
+    from src.fusion.bayesian import BayesianFusion
+
+    return {
+        "risk": {
+            "max_position_usd": settings.max_position_size_usd,
+            "max_portfolio_exposure_pct": settings.max_portfolio_exposure * 100.0,
+            "max_position_pct_per_trade": settings.max_position_pct_per_trade * 100.0,
+            "kelly_fraction": settings.kelly_fraction,
+        },
+        "engine": {
+            "polymarket_fee_pct": BayesianFusion.POLYMARKET_FEE * 100.0,
+            "min_signals": BayesianFusion.MIN_SIGNALS,
+            "min_effective_edge_pct": BayesianFusion.MIN_EDGE * 100.0,
+        },
+    }
+
+
 @dataclass
 class MarketAnalysis:
     market_id: str
@@ -263,6 +283,8 @@ class AgentState:
             "data": {
                 "trading_mode": self.trading_mode,
                 "started_at": self.started_at,
+                "config": _agent_config_snapshot(),
+                "tracked_markets": self.tracked_markets,
                 "portfolio": self.portfolio_snapshot,
                 "analyses": [self._analysis_to_dict(a) for a in self.recent_analyses[-20:]],
                 "events": [

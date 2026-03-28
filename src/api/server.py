@@ -111,6 +111,12 @@ async def get_calibration() -> JSONResponse:
     return JSONResponse(calibration_tracker.to_dict())
 
 
+@app.get("/api/config")
+async def get_config() -> JSONResponse:
+    snap = agent_state.full_snapshot().get("data", {})
+    return JSONResponse(snap.get("config", {}))
+
+
 @app.get("/api/ingestion")
 async def get_ingestion_metrics() -> JSONResponse:
     from src.ingestion.metrics import ingestion_metrics

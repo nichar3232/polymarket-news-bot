@@ -187,7 +187,8 @@ POLYMARKET_PRIVATE_KEY=
 POLYMARKET_FUNDER_ADDRESS=
 
 # ── Trading Mode ──────────────────────────────────────────────────────────────
-TRADING_MODE=paper                   # "paper" or "live"
+TRADING_MODE=paper                   # "paper", "testnet", or "live"
+POLYGON_TESTNET=true                 # ignored when TRADING_MODE=live
 
 # ── Risk Limits ───────────────────────────────────────────────────────────────
 MAX_POSITION_SIZE_USD=50             # Hard cap per position in USD

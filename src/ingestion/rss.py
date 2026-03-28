@@ -10,6 +10,7 @@ import asyncio
 import calendar
 import hashlib
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
@@ -46,6 +47,8 @@ RSS_FEEDS: list[tuple[str, str]] = [
     ("techcrunch",        "https://techcrunch.com/feed/"),
 ]
 
+NEWSAPI_TOP_HEADLINES = "https://newsapi.org/v2/top-headlines"
+
 
 @dataclass
 class NewsItem:
@@ -74,9 +77,13 @@ class RSSMonitor:
         self,
         feeds: list[tuple[str, str]] = RSS_FEEDS,
         poll_interval: int = 60,
+        newsapi_key: str = "",
+        newsapi_page_size: int = 40,
     ) -> None:
         self._feeds = feeds
         self._poll_interval = poll_interval
+        self._newsapi_key = newsapi_key
+        self._newsapi_page_size = newsapi_page_size
         self._seen: set[str] = set()
 
     async def _fetch_feed(
@@ -126,6 +133,78 @@ class RSSMonitor:
 
         return items
 
+    async def _fetch_newsapi(self, session: aiohttp.ClientSession) -> list[NewsItem]:
+        """Fetch supplemental headlines from NewsAPI when a key is provided."""
+        if not self._newsapi_key:
+            return []
+
+        t0 = time.time()
+        try:
+            async with session.get(
+                NEWSAPI_TOP_HEADLINES,
+                params={
+                    "language": "en",
+                    "pageSize": str(self._newsapi_page_size),
+                },
+                headers={
+                    "X-Api-Key": self._newsapi_key,
+                    "User-Agent": "polymarket-news-bot/0.1.0",
+                },
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                if resp.status != 200:
+                    ingestion_metrics.source("newsapi").record_fetch((time.time() - t0) * 1000)
+                    return []
+                payload = await resp.json()
+        except Exception as e:
+            logger.debug(f"NewsAPI fetch error: {e}")
+            ingestion_metrics.source("newsapi").record_fetch((time.time() - t0) * 1000)
+            return []
+
+        items: list[NewsItem] = []
+        for article in payload.get("articles", []):
+            url_str = (article.get("url") or "").strip()
+            title = (article.get("title") or "").strip()
+            if not url_str or not title:
+                continue
+
+            published = time.time()
+            published_at = article.get("publishedAt")
+            if isinstance(published_at, str) and published_at:
+                try:
+                    published = datetime.fromisoformat(
+                        published_at.replace("Z", "+00:00")
+                    ).timestamp()
+                except ValueError:
+                    pass
+
+            source_name = (
+                article.get("source", {}).get("name")
+                if isinstance(article.get("source"), dict)
+                else None
+            ) or "newsapi"
+
+            summary = (
+                (article.get("description") or article.get("content") or "")
+                .strip()
+                .replace("\r", " ")
+                .replace("\n", " ")
+            )[:500]
+
+            items.append(NewsItem(
+                feed_name=f"newsapi:{source_name[:24]}",
+                title=title,
+                summary=summary,
+                url=url_str,
+                published=published,
+            ))
+
+        ingestion_metrics.source("newsapi").record_fetch(
+            (time.time() - t0) * 1000,
+            items=len(items),
+        )
+        return items
+
     async def poll_once(self, session: aiohttp.ClientSession) -> list[NewsItem]:
         """Fetch all feeds, return only new items."""
         t0 = time.time()
@@ -133,6 +212,8 @@ class RSSMonitor:
             self._fetch_feed(session, name, url)
             for name, url in self._feeds
         ]
+        if self._newsapi_key:
+            tasks.append(self._fetch_newsapi(session))
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         new_items: list[NewsItem] = []

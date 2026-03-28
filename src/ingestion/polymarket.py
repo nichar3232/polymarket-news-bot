@@ -62,6 +62,7 @@ class MarketInfo:
     end_date: str
     yes_token_id: str
     no_token_id: str
+    resolution_source: str = ""
     price_yes: float = 0.0
     price_no: float = 0.0
     volume: float = 0.0
@@ -171,6 +172,13 @@ class PolymarketClient:
                             question=m.get("question", ""),
                             description=m.get("description", ""),
                             end_date=m.get("endDate", m.get("end_date", "")),
+                            resolution_source=(
+                                m.get("resolutionSource")
+                                or m.get("resolution_source")
+                                or m.get("resolutionSourceName")
+                                or m.get("resolution_source_name")
+                                or ""
+                            ),
                             yes_token_id=yes_token,
                             no_token_id=no_token,
                             price_yes=price_yes,

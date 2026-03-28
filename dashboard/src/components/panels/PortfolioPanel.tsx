@@ -5,8 +5,13 @@ export function PortfolioPanel() {
   const { state } = useAgent()
   const p = state.portfolio
   const pnlColor = p.total_pnl >= 0 ? 'var(--green)' : 'var(--red)'
-  const maxExposure = 25
-  const exposurePct = Math.min(p.exposure_pct / maxExposure * 100, 100)
+  const cfg = state.config
+  const maxExposure = cfg?.risk?.max_portfolio_exposure_pct ?? 25
+  const maxPositionUsd = cfg?.risk?.max_position_usd ?? 50
+  const minSignals = cfg?.engine?.min_signals ?? 2
+  const minEffEdgePct = cfg?.engine?.min_effective_edge_pct ?? 2
+  const kellyFraction = cfg?.risk?.kelly_fraction ?? 0.25
+  const exposurePct = Math.min((p.exposure_pct / maxExposure) * 100, 100)
 
   return (
     <div className="panel">
@@ -55,10 +60,10 @@ export function PortfolioPanel() {
       </div>
 
       <div className="pf-limits">
-        <div className="pf-limit"><span className="pf-limit-label">Max Position</span><span className="pf-limit-value">$50</span></div>
-        <div className="pf-limit"><span className="pf-limit-label">Min Edge</span><span className="pf-limit-value">2.0%</span></div>
-        <div className="pf-limit"><span className="pf-limit-label">Min Signals</span><span className="pf-limit-value">2</span></div>
-        <div className="pf-limit"><span className="pf-limit-label">Kelly Frac.</span><span className="pf-limit-value">0.25×</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Max Position</span><span className="pf-limit-value">${maxPositionUsd.toFixed(0)}</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Min Eff Edge</span><span className="pf-limit-value">{minEffEdgePct.toFixed(1)}%</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Min Signals</span><span className="pf-limit-value">{minSignals}</span></div>
+        <div className="pf-limit"><span className="pf-limit-label">Kelly Frac.</span><span className="pf-limit-value">{kellyFraction.toFixed(2)}x</span></div>
       </div>
     </div>
   )

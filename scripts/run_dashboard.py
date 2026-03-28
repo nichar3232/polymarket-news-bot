@@ -197,7 +197,10 @@ async def seed_demo_state(session: aiohttp.ClientSession) -> None:
     # Fetch REAL live news from RSS feeds
     print("  Fetching live news from RSS feeds...")
     try:
-        rss = RSSMonitor(poll_interval=60)
+        rss = RSSMonitor(
+            poll_interval=60,
+            newsapi_key=settings.newsapi_key,
+        )
         live_news = await rss.poll_once(session)
         live_news_sorted = sorted(live_news, key=lambda x: x.published, reverse=True)
         count = 0
@@ -234,7 +237,10 @@ async def live_simulation(session: aiohttp.ClientSession) -> None:
         return
 
     bayesian = BayesianFusion()
-    rss = RSSMonitor(poll_interval=60)
+    rss = RSSMonitor(
+        poll_interval=60,
+        newsapi_key=settings.newsapi_key,
+    )
 
     # Wikipedia monitor — track pages related to market questions
     wiki_pages = [

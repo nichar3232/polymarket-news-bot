@@ -25,6 +25,7 @@ from src.ingestion.polymarket import PolymarketClient, MarketInfo
 from src.ingestion.rss import RSSMonitor, keyword_relevance_score
 from src.ingestion.wikipedia import WikipediaEditMonitor
 from src.ingestion.gdelt import fetch_latest_gdelt_gkg, score_gdelt_relevance, gdelt_tone_to_likelihood_ratio
+from src.ingestion.reddit import RedditClient, reddit_sentiment_score
 from src.signals.microstructure import MicrostructureAnalyzer
 from src.signals.cross_market import CrossMarketAnalyzer
 from src.signals.news_relevance import score_rss_item, NewsRelevanceScore
@@ -61,6 +62,14 @@ class PolymarketAgent:
     """
 
     def __init__(self) -> None:
+        configured_mode = (settings.trading_mode or "paper").strip().lower()
+        if configured_mode not in {"paper", "testnet", "live"}:
+            logger.warning(
+                f"Invalid TRADING_MODE='{settings.trading_mode}'. Falling back to 'paper'."
+            )
+            configured_mode = "paper"
+        self._trading_mode = configured_mode
+
         starting_capital = 1000.0
         self.portfolio = PortfolioManager(
             starting_value=starting_capital,
@@ -71,7 +80,7 @@ class PolymarketAgent:
 
         # Initialize CLOB executor for testnet/live modes
         clob_executor = None
-        if settings.trading_mode in ("testnet", "live") and settings.has_polymarket_creds:
+        if self._trading_mode in ("testnet", "live") and settings.has_polymarket_creds:
             from src.execution.clob import CLOBExecutor
             clob_executor = CLOBExecutor(
                 api_key=settings.polymarket_api_key,
@@ -86,8 +95,14 @@ class PolymarketAgent:
         self.order_router = OrderRouter(
             paper_trader=self.paper_trader,
             clob_executor=clob_executor,
-            trading_mode=settings.trading_mode,
+            trading_mode=self._trading_mode,
         )
+        self._effective_trading_mode = self.order_router.mode
+        if self._effective_trading_mode != self._trading_mode:
+            logger.warning(
+                f"Configured mode '{self._trading_mode}' downgraded to "
+                f"'{self._effective_trading_mode}'."
+            )
 
         self.bayesian = BayesianFusion()
         self.ensemble = EnsembleAggregator(self.bayesian)
@@ -100,7 +115,21 @@ class PolymarketAgent:
             timeout_seconds=settings.llm_timeout_seconds,
         )
         self.decomposer = SuperforecasterDecomposer(self.llm_client)
-        self.dashboard = Dashboard(self.portfolio, settings.trading_mode)
+        self.resolution_monitor = ResolutionMonitor()
+        self.dashboard = Dashboard(self.portfolio, self._effective_trading_mode)
+
+        if settings.newsapi_key:
+            logger.info("NEWSAPI_KEY detected: NewsAPI supplemental headline ingestion enabled.")
+        if settings.guardian_api_key:
+            logger.warning("GUARDIAN_API_KEY is configured but Guardian API ingestion is not wired in this build.")
+        if settings.nytimes_api_key:
+            logger.warning("NYTIMES_API_KEY is configured but NYT API ingestion is not wired in this build.")
+
+        if self._trading_mode == "live" and settings.polygon_testnet:
+            logger.warning(
+                "TRADING_MODE=live ignores POLYGON_TESTNET and always uses Polygon mainnet "
+                "(chain 137). Use TRADING_MODE=testnet for Amoy (chain 80002)."
+            )
 
         # Track aiohttp sessions for clean shutdown (Python 3.13 compat)
         self._sessions: list[aiohttp.ClientSession] = []
@@ -110,11 +139,13 @@ class PolymarketAgent:
         self._market_keywords: dict[str, list[str]] = {}
         self._news_buffer: list[tuple[str, object, float, float]] = []  # (market_id, item, score, ts)
         self._gdelt_buffer: dict[str, list] = {}  # market_id -> [(GDELTEvent, relevance, ts)]
+        self._reddit_sentiment: dict[str, tuple[float, float]] = {}  # market_id -> (sentiment, ts)
+        self._resolution_cache: dict[str, tuple[object, float]] = {}  # market_id -> (ResolutionSignal, ts)
         self._microstructure: dict[str, MicrostructureAnalyzer] = {}
         self._markets_ready = asyncio.Event()
 
         # Push initial state to API
-        agent_state.trading_mode = settings.trading_mode
+        agent_state.trading_mode = self._effective_trading_mode
         agent_state.portfolio = self.portfolio.state
 
     async def _refresh_markets(self, client: PolymarketClient) -> None:
@@ -150,7 +181,10 @@ class PolymarketAgent:
         session = aiohttp.ClientSession()
         self._sessions.append(session)
         try:
-            monitor = RSSMonitor(poll_interval=30)   # poll every 30s for low latency
+            monitor = RSSMonitor(
+                poll_interval=30,
+                newsapi_key=settings.newsapi_key,
+            )   # poll every 30s for low latency
             async for batch in monitor.stream(session=session):
                 await self._markets_ready.wait()
                 now = time.time()
@@ -281,6 +315,43 @@ class PolymarketAgent:
         finally:
             await session.close()
 
+    async def _reddit_task(self) -> None:
+        """Poll Reddit and maintain per-market social sentiment for fusion."""
+        await self._markets_ready.wait()
+
+        client = RedditClient(
+            client_id=settings.reddit_client_id,
+            client_secret=settings.reddit_client_secret,
+            user_agent=settings.reddit_user_agent,
+        )
+        session = aiohttp.ClientSession()
+        self._sessions.append(session)
+        try:
+            while True:
+                try:
+                    posts = await client.fetch_all_subreddits(session)
+                    if posts:
+                        by_market: dict[str, list[float]] = {}
+                        for post in posts:
+                            for market_id, keywords in self._market_keywords.items():
+                                score = reddit_sentiment_score(post, keywords)
+                                if score != 0.0:
+                                    by_market.setdefault(market_id, []).append(score)
+
+                        now = time.time()
+                        for market_id, scores in by_market.items():
+                            avg = sum(scores) / len(scores)
+                            prev = self._reddit_sentiment.get(market_id, (0.0, now))[0]
+                            smoothed = 0.7 * prev + 0.3 * avg
+                            self._reddit_sentiment[market_id] = (smoothed, now)
+                except Exception as e:
+                    logger.debug(f"Reddit task error: {e}")
+
+                # Public Reddit endpoint can be rate limited; poll conservatively.
+                await asyncio.sleep(300)
+        finally:
+            await session.close()
+
     def _build_news_context(self, market_news_items: list[tuple]) -> str:
         """Build a meaningful LLM context string from buffered news items."""
         lines = []
@@ -288,6 +359,21 @@ class PolymarketAgent:
             age_min = (time.time() - ts) / 60
             lines.append(f"[{age_min:.0f}min ago, relevance={score:.2f}] {item.title}: {item.summary[:120]}")
         return "\n".join(lines) if lines else "No recent relevant news available."
+
+    @staticmethod
+    def _infer_resolution_source(text: str) -> str | None:
+        text_upper = text.upper()
+        if "REUTERS" in text_upper:
+            return "Reuters"
+        if "ASSOCIATED PRESS" in text_upper or " AP " in f" {text_upper} ":
+            return "AP"
+        if "FEDERAL RESERVE" in text_upper or "FOMC" in text_upper or " FED " in f" {text_upper} ":
+            return "FED"
+        if "BUREAU OF LABOR STATISTICS" in text_upper or " BLS " in f" {text_upper} ":
+            return "BLS"
+        if "FDA" in text_upper or "FOOD AND DRUG ADMINISTRATION" in text_upper:
+            return "FDA"
+        return None
 
     async def _evaluate_market(
         self,
@@ -393,6 +479,37 @@ class PolymarketAgent:
                     bundle.gdelt_lr = math.exp(log_lr_sum / weight_sum)
                     # confidence scales with number of events; saturates at ~5 events
                     bundle.gdelt_confidence = min(weight_sum / 5.0, 0.65)
+
+            # --- Reddit social sentiment (stale after 60 minutes) ---
+            reddit_sig = self._reddit_sentiment.get(market_id)
+            if reddit_sig is not None:
+                sentiment, ts = reddit_sig
+                if now - ts < 3_600:
+                    bundle.reddit_sentiment = max(-1.0, min(1.0, sentiment))
+
+            # --- Resolution authority signal (cached 10 min, hard-timeout 5 s) ---
+            cached_resolution = self._resolution_cache.get(market_id)
+            if cached_resolution is not None and now - cached_resolution[1] < 600:
+                bundle.resolution = cached_resolution[0]
+            else:
+                resolution_source = market.resolution_source or self._infer_resolution_source(
+                    f"{market.question} {market.description}"
+                )
+                if resolution_source:
+                    try:
+                        resolution_signal = await asyncio.wait_for(
+                            self.resolution_monitor.check_resolution(
+                                session=session,
+                                resolution_criteria=market.description or market.question,
+                                resolution_source=resolution_source,
+                                market_keywords=keywords,
+                            ),
+                            timeout=5.0,
+                        )
+                        bundle.resolution = resolution_signal
+                        self._resolution_cache[market_id] = (resolution_signal, now)
+                    except Exception as e:
+                        logger.debug(f"Resolution signal failed for {market_id[:30]}: {e}")
 
             # --- Fuse ---
             result = self.ensemble.aggregate(bundle)
@@ -543,6 +660,7 @@ class PolymarketAgent:
             running_tasks = [
                 asyncio.create_task(self._main_loop(), name="main_loop"),
                 asyncio.create_task(self._rss_task(), name="rss_task"),
+                asyncio.create_task(self._reddit_task(), name="reddit_task"),
                 asyncio.create_task(self._wikipedia_task(), name="wikipedia_task"),
                 asyncio.create_task(self._gdelt_task(), name="gdelt_task"),
             ]

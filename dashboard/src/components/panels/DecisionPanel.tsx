@@ -13,7 +13,12 @@ export function DecisionPanel() {
 
   const dir = selected.trade_direction
   const actionLabel = dir === 'NONE' ? 'HOLD' : dir
-  const edgeColor = selected.effective_edge >= 0.05 ? 'var(--green)' : selected.effective_edge > 0 ? 'var(--yellow)' : 'var(--text-dim)'
+  const signedEff = (selected.edge >= 0 ? 1 : -1) * selected.effective_edge
+  const edgeColor =
+    signedEff >= 0.05 ? 'var(--green)' :
+    signedEff > 0 ? 'var(--yellow)' :
+    signedEff < 0 ? 'var(--red)' :
+    'var(--text-dim)'
 
   return (
     <div className="panel">
@@ -32,9 +37,9 @@ export function DecisionPanel() {
         </div>
         <span className="dec-arrow">→</span>
         <div className="dec-metric">
-          <span className="dec-label">Edge</span>
+          <span className="dec-label">Eff Edge</span>
           <span className="dec-val" style={{ color: edgeColor }}>
-            {selected.effective_edge >= 0 ? '+' : ''}{(selected.effective_edge * 100).toFixed(1)}%
+            {signedEff >= 0 ? '+' : ''}{(signedEff * 100).toFixed(1)}%
           </span>
         </div>
         <span className="dec-arrow">→</span>

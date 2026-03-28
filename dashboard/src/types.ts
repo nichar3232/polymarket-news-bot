@@ -67,9 +67,24 @@ export interface PnLPoint {
   pnl_pct: number
 }
 
+export interface AgentConfig {
+  risk: {
+    max_position_usd: number
+    max_portfolio_exposure_pct: number
+    max_position_pct_per_trade: number
+    kelly_fraction: number
+  }
+  engine: {
+    polymarket_fee_pct: number
+    min_signals: number
+    min_effective_edge_pct: number
+  }
+}
+
 export interface AgentState {
   trading_mode: string
   started_at: number
+  config?: AgentConfig
   portfolio: Portfolio
   analyses: Analysis[]
   events: AgentEvent[]
