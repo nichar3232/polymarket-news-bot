@@ -84,15 +84,15 @@ Step 7: Bayesian Fusion Engine
 │ Position Size: $50.00 (capped)                                               │
 │ Expected Value: 0.1676                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-2026-03-28 03:31:13.527 | INFO     | src.risk.portfolio:open_position:168 - Opened NO position: demo-fed-rate-cut-march-2024 | $50.00 @ 0.822 | fee=$1.00
-2026-03-28 03:31:13.527 | INFO     | src.execution.paper:place_order:98 - PAPER FILL | NO demo-fed-rate-cut-march-2024 | $50.00 @ 0.8216 | ID: d9efe5b7
+2026-03-28 13:44:06.010 | INFO     | src.risk.portfolio:open_position:174 - Opened NO position: demo-fed-rate-cut-march-2024 | $50.00 @ 0.822 | fee=$1.00
+2026-03-28 13:44:06.010 | INFO     | src.execution.paper:place_order:99 - PAPER FILL | NO demo-fed-rate-cut-march-2024 | $50.00 @ 0.8216 | ID: 9b253a1a
 ╭──────────────────── Step 9: Order Execution (Paper Mode) ────────────────────╮
 │ PAPER ORDER PLACED                                                           │
 │ Market: Will the Federal Reserve cut interest rates at the March 202         │
 │ Direction: BUY NO (betting against rate cut)                                 │
 │ Size: $50.00                                                                 │
 │ Fill Price: 0.8216                                                           │
-│ Order ID: d9efe5b7                                                           │
+│ Order ID: 9b253a1a                                                           │
 │                                                                              │
 │ Market Outcome: The Fed did NOT cut rates in March 2024. ✓                   │
 │ This trade would have been profitable.                                       │

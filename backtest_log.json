@@ -1,0 +1,202 @@
+{
+  "meta": {
+    "generator": "polymarket-news-bot/scripts/generate_backtest_log.py",
+    "generated_at": "2026-03-28T13:45:24.582882+00:00",
+    "event": "Fed rate cut March 2024 FOMC",
+    "methodology": "docs/methodology.md"
+  },
+  "market": {
+    "market_id": "demo-fed-rate-cut-march-2024",
+    "question": "Will the Federal Reserve cut interest rates at the March 2024 FOMC meeting?",
+    "resolution_criteria": "Resolves YES if the FOMC announces a rate cut of any size at the March 19-20, 2024 meeting.",
+    "market_price_yes": 0.18,
+    "market_price_no": 0.82,
+    "observed_at": "2024-03-12T13:00:00Z",
+    "true_outcome": "NO",
+    "source": "Polymarket (public CLOB API)"
+  },
+  "news_ingestion": {
+    "articles_scanned": 120,
+    "articles_relevant": 2,
+    "relevance_threshold": 0.15,
+    "articles": [
+      {
+        "source": "Reuters RSS",
+        "title": "US CPI rises 0.4% in February, higher than expected",
+        "summary": "Consumer prices rose 0.4% in February, above economist forecasts of 0.3%, reducing expectations for early Federal Reserve rate cuts.",
+        "url": "https://www.reuters.com/markets/us/us-cpi-feb-2024/",
+        "published_at": "2024-03-12T12:30:00Z",
+        "relevance_score": 0.85,
+        "sentiment_score": -0.6,
+        "sentiment_label": "bearish_for_rate_cut"
+      },
+      {
+        "source": "AP News",
+        "title": "Powell signals no rush to cut rates amid sticky inflation",
+        "summary": "Federal Reserve Chair Jerome Powell told Congress the central bank is not ready to cut rates and needs more data showing inflation is sustainably moving toward the 2% target.",
+        "url": "https://apnews.com/article/powell-fed-rates-march-2024",
+        "published_at": "2024-03-07T14:00:00Z",
+        "relevance_score": 0.95,
+        "sentiment_score": -0.75,
+        "sentiment_label": "bearish_for_rate_cut"
+      }
+    ]
+  },
+  "cross_market": {
+    "platforms_checked": 3,
+    "consensus_direction": "NO",
+    "prices": [
+      {
+        "platform": "Kalshi",
+        "price_yes": 0.12,
+        "delta_vs_polymarket": -0.06
+      },
+      {
+        "platform": "Metaculus",
+        "price_yes": 0.1,
+        "delta_vs_polymarket": -0.08
+      },
+      {
+        "platform": "Manifold",
+        "price_yes": 0.15,
+        "delta_vs_polymarket": -0.03
+      }
+    ]
+  },
+  "microstructure": {
+    "vpin": 0.52,
+    "vpin_threshold": 0.4,
+    "order_flow_imbalance": -0.38,
+    "informed_trading_detected": true,
+    "signal_direction": "NO",
+    "notes": "VPIN above threshold indicates informed traders; negative OFI confirms NO pressure"
+  },
+  "wikipedia_velocity": {
+    "page": "Federal_Reserve",
+    "edits_in_5min": 8,
+    "velocity_multiplier": 4.2,
+    "interpretation": "Edit spike suggests breaking news \u2014 amplifies directional signals from other sources"
+  },
+  "llm_decomposition": {
+    "model": "llama-3.3-70b (Groq)",
+    "latency_ms": 847,
+    "sub_claims": [
+      {
+        "claim": "CPI will be below 3.0% by March 2024 FOMC meeting",
+        "probability": 0.35,
+        "reasoning": "February CPI came in at 3.2%; services inflation remains sticky."
+      },
+      {
+        "claim": "Labor market will show significant weakening before March FOMC",
+        "probability": 0.2,
+        "reasoning": "Unemployment at 3.9%, near historical lows. No meaningful deterioration visible."
+      },
+      {
+        "claim": "Powell will signal readiness to cut in pre-meeting communications",
+        "probability": 0.15,
+        "reasoning": "Powell's Congressional testimony explicitly stated the Fed is 'not quite there yet'."
+      }
+    ],
+    "inside_view_probability": 0.12,
+    "outside_view_base_rate": 0.25,
+    "outside_view_reasoning": "Fed cuts at ~25% of FOMC meetings in non-crisis periods; current inflation environment is atypical.",
+    "blended_probability": 0.15,
+    "confidence_interval": {
+      "lower": 0.08,
+      "upper": 0.25
+    },
+    "update_direction": "bearish"
+  },
+  "signals": [
+    {
+      "source": "news_rss",
+      "likelihood_ratio": 0.42,
+      "effective_lr": 0.536,
+      "confidence": 0.8,
+      "raw_value": -0.65,
+      "direction": "NO",
+      "notes": "2 articles: Feb CPI surprise + Powell hawkish Congressional testimony"
+    },
+    {
+      "source": "microstructure_vpin",
+      "likelihood_ratio": 0.55,
+      "effective_lr": 0.685,
+      "confidence": 0.7,
+      "raw_value": 0.52,
+      "direction": "NO",
+      "notes": "VPIN=0.52, OFI=-0.38 \u2014 informed traders buying NO"
+    },
+    {
+      "source": "cross_market",
+      "likelihood_ratio": 0.38,
+      "effective_lr": 0.473,
+      "confidence": 0.85,
+      "raw_value": 0.13,
+      "direction": "NO",
+      "notes": "Kalshi=0.12, Metaculus=0.10, Manifold=0.15 \u2014 all more bearish than Polymarket"
+    },
+    {
+      "source": "llm_decomposition",
+      "likelihood_ratio": 0.72,
+      "effective_lr": 0.79,
+      "confidence": 0.75,
+      "raw_value": 0.15,
+      "direction": "NO",
+      "notes": "Blended superforecaster probability: 15%"
+    },
+    {
+      "source": "wikipedia_velocity",
+      "likelihood_ratio": 1.2,
+      "effective_lr": 1.12,
+      "confidence": 0.6,
+      "raw_value": 4.2,
+      "direction": "YES",
+      "notes": "4.2x edit velocity spike on Federal_Reserve page \u2014 amplifier signal"
+    }
+  ],
+  "bayesian_fusion": {
+    "formula": "posterior_odds = prior_odds \u00d7 PROD(effective_LR_i)",
+    "prior_prob": 0.18,
+    "prior_prob_pct": "18.0%",
+    "posterior_prob": 0.0391,
+    "posterior_prob_pct": "3.9%",
+    "confidence_interval_90": {
+      "lower": 0.02,
+      "upper": 0.072
+    }
+  },
+  "edge": {
+    "raw_edge": -0.1409,
+    "effective_edge_after_fee": 0.1209,
+    "fee_assumption": "2%",
+    "minimum_threshold": 0.03,
+    "edge_clears_threshold": true,
+    "interpretation": "Model says P(YES)=3.9%, market says 18.0%. Edge of 14.1% favors buying NO."
+  },
+  "trade_decision": {
+    "direction": "NO",
+    "rationale": "All 4 directional signals point NO. Posterior (3.9%) is 14.1pp below market price (18%). Edge clears 3% threshold. Kelly sizing confirms positive EV.",
+    "kelly": {
+      "full_kelly_f_star": 0.7792,
+      "fractional_kelly": 0.1948,
+      "kelly_factor": 0.25,
+      "position_size_usd": 50.0,
+      "capped_by_risk_limit": true,
+      "expected_value": 0.1676
+    },
+    "order": {
+      "market_id": "demo-fed-rate-cut-march-2024",
+      "side": "NO",
+      "size_usd": 50.0,
+      "fill_price": 0.82,
+      "mode": "paper",
+      "placed": true
+    }
+  },
+  "outcome": {
+    "true_resolution": "NO",
+    "trade_correct": true,
+    "pnl_pct": 0.0419,
+    "notes": "Fed held rates at March 19-20, 2024 FOMC meeting. NO position expired at $1.00. Trade was profitable."
+  }
+}
