@@ -38,7 +38,7 @@ from src.execution.paper import PaperTrader
 from config.settings import settings
 
 
-console = Console()
+console = Console(force_terminal=True)
 
 # --- Historical event data (real values from Polymarket public API) ---
 
