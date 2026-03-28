@@ -17,6 +17,8 @@ import aiohttp
 import feedparser
 from loguru import logger
 
+from src.ingestion.metrics import ingestion_metrics
+
 
 RSS_FEEDS: list[tuple[str, str]] = [
     ("reuters_world",     "https://feeds.reuters.com/reuters/worldNews"),
@@ -118,6 +120,7 @@ class RSSMonitor:
 
     async def poll_once(self, session: aiohttp.ClientSession) -> list[NewsItem]:
         """Fetch all feeds, return only new items."""
+        t0 = time.time()
         tasks = [
             self._fetch_feed(session, name, url)
             for name, url in self._feeds
@@ -137,22 +140,37 @@ class RSSMonitor:
         if len(self._seen) > 50_000:
             self._seen = set(list(self._seen)[-25_000:])
 
+        elapsed_ms = (time.time() - t0) * 1000
+        ingestion_metrics.source("rss").record_fetch(elapsed_ms, items=len(new_items))
+
         return new_items
 
-    async def stream(self) -> AsyncGenerator[list[NewsItem], None]:
+    async def stream(
+        self, session: aiohttp.ClientSession | None = None,
+    ) -> AsyncGenerator[list[NewsItem], None]:
         """
         Async generator — yields batches of new NewsItems on each poll.
+
+        Args:
+            session: Optional externally-managed ClientSession.  When provided
+                     the caller owns the session lifecycle (no close on exit).
         Usage:
             async for batch in monitor.stream():
                 process(batch)
         """
-        async with aiohttp.ClientSession() as session:
+        owns_session = session is None
+        if owns_session:
+            session = aiohttp.ClientSession()
+        try:
             while True:
                 items = await self.poll_once(session)
                 if items:
                     logger.info(f"RSS: {len(items)} new articles")
                     yield items
                 await asyncio.sleep(self._poll_interval)
+        finally:
+            if owns_session:
+                await session.close()
 
 
 def keyword_relevance_score(item: NewsItem, keywords: list[str]) -> float:

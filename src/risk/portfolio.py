@@ -49,6 +49,14 @@ class PortfolioState:
     total_trades: int = 0
     winning_trades: int = 0
     total_fees_paid: float = 0.0
+    gross_profits: float = 0.0
+    gross_losses: float = 0.0
+
+    @property
+    def profit_factor(self) -> float:
+        if self.gross_losses == 0:
+            return float('inf')
+        return self.gross_profits / self.gross_losses
 
     @property
     def total_exposure_usd(self) -> float:
@@ -64,7 +72,7 @@ class PortfolioState:
 
     @property
     def total_pnl(self) -> float:
-        return self.closed_pnl + self.unrealized_pnl
+        return self.total_value - self.starting_value
 
     @property
     def total_pnl_pct(self) -> float:
@@ -183,6 +191,9 @@ class PortfolioManager:
 
         if net_pnl > 0:
             self.state.winning_trades += 1
+            self.state.gross_profits += net_pnl
+        elif net_pnl < 0:
+            self.state.gross_losses += abs(net_pnl)
 
         logger.info(
             f"Closed {position.direction} position: {market_id} | "

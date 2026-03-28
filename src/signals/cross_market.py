@@ -38,7 +38,7 @@ class CrossMarketAnalyzer:
     """
 
     POLYMARKET_FEE = 0.02
-    MIN_DIVERGENCE = 0.05
+    MIN_DIVERGENCE = 0.08
 
     async def fetch_kalshi_markets(
         self,
@@ -265,12 +265,13 @@ def _cross_market_lr(magnitude: float, n_sources: int, direction: int) -> float:
 
     Formula:
     LR = exp(direction * magnitude * n_sources_multiplier * k)
-    k = 3.0 (calibrated to make a 0.15 divergence from 2 sources → LR ≈ 2.5)
+    k = 1.5 (was 3.0 — previous calibration massively overweighted small divergences)
     """
-    source_multiplier = {1: 0.7, 2: 1.0, 3: 1.3}.get(n_sources, 1.0)
-    k = 3.0
+    source_multiplier = {1: 0.5, 2: 0.85, 3: 1.1}.get(n_sources, 0.85)
+    k = 1.5
     exponent = direction * magnitude * source_multiplier * k
-    return math.exp(exponent)
+    # Cap: cross-market arb signal should not dominate
+    return max(0.5, min(2.5, math.exp(exponent)))
 
 
 def _format_notes(

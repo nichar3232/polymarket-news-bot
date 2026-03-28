@@ -86,34 +86,39 @@ class EnsembleAggregator:
 
         # 4. News signals — aggregate multiple articles
         if bundle.news_scores:
-            # Weighted average of LRs in log space (recency-weighted)
-            log_lr_sum = sum(
-                math.log(max(0.01, ns.likelihood_ratio)) * ns.raw_relevance
-                for ns in bundle.news_scores
-                if ns.raw_relevance > 0.1
-            )
-            weight_sum = sum(ns.raw_relevance for ns in bundle.news_scores if ns.raw_relevance > 0.1)
-            if weight_sum > 0:
-                avg_log_lr = log_lr_sum / weight_sum
-                agg_lr = math.exp(avg_log_lr)
-                avg_confidence = min(weight_sum / 3.0, 0.85)   # more articles = more confidence
-                signals.append(SignalUpdate(
-                    source="news_rss",
-                    likelihood_ratio=agg_lr,
-                    confidence=avg_confidence,
-                    raw_value=weight_sum,
-                    notes=f"Aggregated {len(bundle.news_scores)} articles",
-                ))
+            # Filter to meaningfully relevant articles
+            relevant = [ns for ns in bundle.news_scores if ns.raw_relevance > 0.15]
+            if relevant:
+                log_lr_sum = sum(
+                    math.log(max(0.01, ns.likelihood_ratio)) * ns.raw_relevance
+                    for ns in relevant
+                )
+                weight_sum = sum(ns.raw_relevance for ns in relevant)
+                if weight_sum > 0:
+                    avg_log_lr = log_lr_sum / weight_sum
+                    agg_lr = math.exp(avg_log_lr)
+                    # Cap confidence lower — news sentiment is noisy
+                    avg_confidence = min(weight_sum / 5.0, 0.60)
+                    signals.append(SignalUpdate(
+                        source="news_rss",
+                        likelihood_ratio=agg_lr,
+                        confidence=avg_confidence,
+                        raw_value=weight_sum,
+                        notes=f"Aggregated {len(relevant)} articles",
+                    ))
 
         # 5. LLM decomposition
         if bundle.llm_decomposition is not None:
             decomp = bundle.llm_decomposition
             # Confidence from CI width: narrow CI = high confidence
+            # Floor raised from 0.3 to 0.4 — wide-CI LLM outputs are noise
             ci_width = decomp.confidence_interval[1] - decomp.confidence_interval[0]
-            confidence = max(0.3, 1.0 - ci_width * 2)
+            confidence = max(0.4, 1.0 - ci_width * 2)
+            # Cap LLM LR — LLMs are not calibrated forecasters
+            capped_lr = max(0.5, min(2.0, decomp.likelihood_ratio))
             signals.append(SignalUpdate(
                 source="llm_decomposition",
-                likelihood_ratio=decomp.likelihood_ratio,
+                likelihood_ratio=capped_lr,
                 confidence=confidence,
                 raw_value=decomp.blended_probability,
                 notes=(
@@ -139,23 +144,17 @@ class EnsembleAggregator:
                 notes=f"Evidence found: {bundle.resolution.evidence_text[:80]}",
             ))
 
-        # 7. Reddit social sentiment
-        if abs(bundle.reddit_sentiment) > 0.1:
-            lr = math.exp(bundle.reddit_sentiment * 0.8)   # weak signal, low weight
-            signals.append(SignalUpdate(
-                source="reddit_social",
-                likelihood_ratio=lr,
-                confidence=0.35,   # Reddit is noisy
-                raw_value=bundle.reddit_sentiment,
-                notes=f"Sentiment score={bundle.reddit_sentiment:+.3f}",
-            ))
+        # 7. Reddit social sentiment — DISABLED
+        # Reddit sentiment at 0.35 confidence adds noise, not alpha.
+        # Keeping the field in MarketSignalBundle for future use if we
+        # build a better NLP pipeline.
 
         # 8. Wikipedia velocity
         if bundle.wikipedia_velocity_lr != 1.0:
             signals.append(SignalUpdate(
                 source="wikipedia_velocity",
                 likelihood_ratio=bundle.wikipedia_velocity_lr,
-                confidence=0.6,
+                confidence=0.45,   # was 0.6 — Wikipedia spikes are suggestive, not definitive
                 raw_value=bundle.wikipedia_velocity_lr,
                 notes="Wikipedia edit spike detected",
             ))

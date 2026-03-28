@@ -17,6 +17,7 @@ correlated, so we apply a damping factor to prevent overconfidence.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -43,14 +44,23 @@ class SignalUpdate:
     confidence: float           # 0.0–1.0 (how much we trust this signal)
     raw_value: float            # Original signal value (e.g., sentiment score, VPIN)
     notes: str = ""
+    timestamp: float = field(default_factory=time.time)
 
     @property
     def effective_lr(self) -> float:
-        """Dampen LR toward 1.0 based on confidence."""
-        if self.likelihood_ratio >= 1.0:
-            return 1.0 + (self.likelihood_ratio - 1.0) * self.confidence
+        """Dampen LR toward 1.0 based on confidence and signal age."""
+        base = self.likelihood_ratio
+        if base >= 1.0:
+            dampened = 1.0 + (base - 1.0) * self.confidence
         else:
-            return 1.0 - (1.0 - self.likelihood_ratio) * self.confidence
+            dampened = 1.0 - (1.0 - base) * self.confidence
+
+        # Exponential time decay: half-life of 30 minutes
+        age_s = max(0, time.time() - self.timestamp)
+        half_life = 1800  # 30 minutes
+        decay = 2 ** (-age_s / half_life)
+        # Decay pulls LR toward 1.0 (neutral)
+        return 1.0 + (dampened - 1.0) * decay
 
 
 @dataclass
@@ -105,8 +115,23 @@ class BayesianFusion:
     """
 
     POLYMARKET_FEE = 0.02       # 2% fee on profits
-    MIN_EDGE = 0.03             # 3% minimum edge after fees
-    CORRELATION_DAMPING = 0.85  # Prevents overconfidence from correlated signals
+    MIN_EDGE = 0.05             # 5% minimum edge after fees (was 3%)
+    MIN_SIGNALS = 3             # require at least 3 signals to trade
+
+    # Correlation groups: signals within a group share information and get
+    # heavier damping when combined.  Signals across groups are more
+    # independent and keep more of their weight.
+    CORRELATION_GROUPS: dict[str, list[str]] = {
+        "news":           ["news_rss", "news_gdelt"],
+        "microstructure": ["microstructure_vpin", "microstructure_spread"],
+        "reasoning":      ["llm_decomposition"],
+        "cross_market":   ["cross_market"],
+        "alternative":    ["wikipedia_velocity", "resolution_source"],
+    }
+    # Damping applied to 2nd, 3rd, ... signal within the same correlation group
+    INTRA_GROUP_DAMPING = 0.40
+    # Damping applied to each signal across groups (mild — they're mostly independent)
+    INTER_GROUP_DAMPING = 0.90
 
     def fuse(
         self,
@@ -131,18 +156,42 @@ class BayesianFusion:
         prior = max(0.01, min(0.99, prior_prob))
         prior_log_odds = math.log(prior / (1 - prior))
 
-        # Accumulate log-likelihood ratios
+        # Accumulate log-likelihood ratios with structured correlation damping.
+        # Within a correlation group the 1st signal keeps full weight but each
+        # additional signal in the same group is heavily damped (they share
+        # information).  Across groups we apply only mild damping.
         log_lr_sum = 0.0
+        group_counts: dict[str, int] = {}
+
+        # Build a reverse lookup: source -> group name
+        source_to_group: dict[str, str] = {}
+        for gname, sources in self.CORRELATION_GROUPS.items():
+            for src in sources:
+                source_to_group[src] = gname
+
         for signal in signals:
             eff_lr = max(0.01, signal.effective_lr)   # never take log(0)
             log_lr = math.log(eff_lr)
 
-            # Correlation damping: each signal gets slightly less weight
-            # to account for the fact that signals share information
-            log_lr_damped = log_lr * self.CORRELATION_DAMPING
-            log_lr_sum += log_lr_damped
+            # Determine damping based on correlation group
+            group = source_to_group.get(signal.source, signal.source)
+            group_counts[group] = group_counts.get(group, 0) + 1
+
+            if group_counts[group] > 1:
+                # 2nd+ signal in same group: heavy damping
+                damping = self.INTRA_GROUP_DAMPING
+            else:
+                # First signal in group: mild cross-group damping
+                damping = self.INTER_GROUP_DAMPING
+
+            log_lr_sum += log_lr * damping
 
         posterior_log_odds = prior_log_odds + log_lr_sum
+
+        # Clamp log-odds to prevent math.exp overflow (>709 → OverflowError
+        # or inf → NaN when dividing inf/inf).
+        posterior_log_odds = max(-20.0, min(20.0, posterior_log_odds))
+
         posterior_odds = math.exp(posterior_log_odds)
         posterior_prob = posterior_odds / (1 + posterior_odds)
         posterior_prob = max(0.01, min(0.99, posterior_prob))
@@ -153,8 +202,8 @@ class BayesianFusion:
         # Confidence interval from signal uncertainty
         ci = self._compute_ci(posterior_prob, signals)
 
-        # Trade direction
-        if effective_edge >= min_edge:
+        # Trade direction — require both edge AND minimum signal count
+        if effective_edge >= min_edge and len(signals) >= self.MIN_SIGNALS:
             trade_direction: Literal["YES", "NO", "NONE"] = "YES" if edge > 0 else "NO"
         else:
             trade_direction = "NONE"
@@ -235,10 +284,10 @@ def compute_news_lr(
     Convenience function: convert news signal to likelihood ratio.
     Used when building SignalUpdate objects.
     """
-    if relevance < 0.1:
+    if relevance < 0.15:
         return 1.0
-    k = 2.5
-    return math.exp(sentiment * relevance * confidence * k)
+    k = 1.2
+    return max(0.5, min(2.0, math.exp(sentiment * relevance * confidence * k)))
 
 
 def prob_to_log_odds(p: float) -> float:

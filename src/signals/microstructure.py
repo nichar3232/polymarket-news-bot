@@ -199,10 +199,12 @@ def _vpin_to_likelihood_ratio(vpin: float, ofi: float) -> float:
     direction_magnitude = ofi * vpin_strength
 
     # Map to LR: e^(k * direction_magnitude)
-    # k=2 means OFI=1.0 at full vpin → LR = e^2 ≈ 7.4 (very strong)
-    k = 2.0
+    # k=1.0 means OFI=1.0 at full vpin → LR = e^1 ≈ 2.7 (moderate)
+    # Previous k=2.0 produced LR up to 7.4 which massively overfit to noise.
+    k = 1.0
     lr = math.exp(k * direction_magnitude)
-    return lr
+    # Cap: no microstructure signal should dominate the posterior
+    return max(0.4, min(lr, 2.5))
 
 
 def _spread_to_likelihood_ratio(depth_imbalance: float, spread_pct: float) -> float:

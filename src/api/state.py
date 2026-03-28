@@ -8,7 +8,9 @@ asyncio event loop, so no locking is required.
 from __future__ import annotations
 
 import asyncio
+import math
 import time
+from math import sqrt
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -54,6 +56,7 @@ class AgentState:
         self.tracked_markets: list[dict] = []
         self.recent_analyses: list[MarketAnalysis] = []
         self.events: list[EventLog] = []
+        self.news_items: list[dict] = []
         self.pnl_history: list[tuple[float, float]] = []   # (timestamp, pnl_pct)
         self.started_at: float = time.time()
 
@@ -88,6 +91,13 @@ class AgentState:
             ],
         )
 
+        from src.fusion.calibration import calibration_tracker
+        calibration_tracker.record_prediction(
+            market_id=result.market_id,
+            predicted_prob=result.posterior_prob,
+            signal_count=result.signal_count,
+        )
+
         # Replace existing analysis for same market
         self.recent_analyses = [a for a in self.recent_analyses if a.market_id != result.market_id]
         self.recent_analyses.append(analysis)
@@ -102,6 +112,21 @@ class AgentState:
         if len(self.events) > self.MAX_EVENTS:
             self.events = self.events[-self.MAX_EVENTS:]
         self._broadcast({"type": "event", "data": {"kind": kind, "message": message, "ts": event.timestamp}})
+
+    MAX_NEWS = 200
+
+    def push_news(self, title: str, source: str, relevance: float, market_id: str = "") -> None:
+        item = {
+            "title": title,
+            "source": source,
+            "relevance": round(relevance, 2),
+            "market_id": market_id,
+            "ts": time.time(),
+        }
+        self.news_items.append(item)
+        if len(self.news_items) > self.MAX_NEWS:
+            self.news_items = self.news_items[-self.MAX_NEWS:]
+        self._broadcast({"type": "news", "data": item})
 
     @property
     def portfolio_snapshot(self) -> dict:
@@ -136,6 +161,40 @@ class AgentState:
         self.pnl_history.append((time.time(), s.total_pnl_pct * 100))
         if len(self.pnl_history) > 500:
             self.pnl_history = self.pnl_history[-500:]
+
+        # Sharpe ratio (annualized) from pnl_history
+        sharpe_ratio = None
+        if len(self.pnl_history) >= 2:
+            pnl_vals = [p for _, p in self.pnl_history]
+            returns = [pnl_vals[i] - pnl_vals[i - 1] for i in range(1, len(pnl_vals))]
+            mean_ret = sum(returns) / len(returns)
+            std_ret = (sum((r - mean_ret) ** 2 for r in returns) / len(returns)) ** 0.5
+            if std_ret > 0:
+                sharpe_ratio = round((mean_ret / std_ret) * sqrt(252), 2)
+
+        # Max drawdown (peak-to-trough) from pnl_history
+        max_drawdown_pct = None
+        if len(self.pnl_history) >= 2:
+            pnl_vals = [p for _, p in self.pnl_history]
+            peak = pnl_vals[0]
+            max_dd = 0.0
+            for v in pnl_vals:
+                if v > peak:
+                    peak = v
+                dd = peak - v
+                if dd > max_dd:
+                    max_dd = dd
+            max_drawdown_pct = round(max_dd, 2)
+
+        # Profit factor
+        profit_factor = None
+        pf = s.profit_factor
+        if not (math.isnan(pf) if isinstance(pf, float) and not math.isinf(pf) else False):
+            profit_factor = round(pf, 2) if not math.isinf(pf) else 999.99
+
+        snap["sharpe_ratio"] = sharpe_ratio
+        snap["max_drawdown_pct"] = max_drawdown_pct
+        snap["profit_factor"] = profit_factor
 
         self._broadcast({"type": "portfolio", "data": snap})
         return snap
@@ -177,23 +236,38 @@ class AgentState:
                 "pnl_history": [
                     {"ts": ts, "pnl_pct": pnl} for ts, pnl in self.pnl_history
                 ],
+                "news": self.news_items[-50:],
             },
         }
 
     @staticmethod
-    def _analysis_to_dict(a: MarketAnalysis) -> dict:
+    def _safe_float(v: float, default: float = 0.0) -> float:
+        """Replace NaN / Infinity with a safe default so JSON stays valid."""
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return default
+        return v
+
+    @classmethod
+    def _analysis_to_dict(cls, a: MarketAnalysis) -> dict:
+        sf = cls._safe_float
         return {
             "market_id": a.market_id,
             "question": a.question,
-            "prior": round(a.prior, 4),
-            "posterior": round(a.posterior, 4),
-            "edge": round(a.edge, 4),
-            "effective_edge": round(a.effective_edge, 4),
+            "prior": sf(round(a.prior, 4), 0.5),
+            "posterior": sf(round(a.posterior, 4), 0.5),
+            "edge": sf(round(a.edge, 4)),
+            "effective_edge": sf(round(a.effective_edge, 4)),
             "trade_direction": a.trade_direction,
-            "ci_lower": round(a.ci_lower, 4),
-            "ci_upper": round(a.ci_upper, 4),
+            "ci_lower": sf(round(a.ci_lower, 4), 0.02),
+            "ci_upper": sf(round(a.ci_upper, 4), 0.98),
             "signal_count": a.signal_count,
-            "signals": a.signals,
+            "signals": [
+                {
+                    k: (sf(v) if isinstance(v, float) else v)
+                    for k, v in sig.items()
+                }
+                for sig in a.signals
+            ],
             "timestamp": a.timestamp,
         }
 

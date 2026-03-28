@@ -14,6 +14,8 @@ from typing import AsyncIterator, Callable
 import aiohttp
 from loguru import logger
 
+from src.ingestion.metrics import ingestion_metrics
+
 
 POLYMARKET_REST = "https://clob.polymarket.com"
 POLYMARKET_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
@@ -89,6 +91,7 @@ class PolymarketClient:
 
     async def get_markets(self, limit: int = 100, active_only: bool = True) -> list[MarketInfo]:
         """Fetch active markets from Gamma API (no auth required)."""
+        t0 = time.time()
         params: dict[str, str | int] = {"limit": limit}
         if active_only:
             params["active"] = "true"
@@ -101,34 +104,90 @@ class PolymarketClient:
                 markets = []
                 for m in data:
                     try:
-                        yes_token = no_token = ""
+                        # --- Resolve outcome ordering ---
+                        # The Gamma API provides parallel arrays: outcomes,
+                        # outcomePrices, and clobTokenIds.  Index 0 is usually
+                        # "Yes" but we check the outcomes array to be safe.
+                        raw_outcomes = m.get("outcomes")
+                        if raw_outcomes:
+                            outcomes = json.loads(raw_outcomes) if isinstance(raw_outcomes, str) else raw_outcomes
+                        else:
+                            outcomes = ["Yes", "No"]
+                        yes_idx = 0
+                        no_idx = 1
+                        for i, label in enumerate(outcomes):
+                            if str(label).lower() == "yes":
+                                yes_idx = i
+                            elif str(label).lower() == "no":
+                                no_idx = i
+
+                        # --- Prices (outcomePrices is the primary source) ---
                         price_yes = price_no = 0.0
-                        for token in m.get("tokens", []):
-                            if token.get("outcome") == "Yes":
-                                yes_token = token.get("token_id", "")
-                                price_yes = float(token.get("price", 0))
-                            elif token.get("outcome") == "No":
-                                no_token = token.get("token_id", "")
-                                price_no = float(token.get("price", 0))
+                        raw_prices = m.get("outcomePrices")
+                        if raw_prices:
+                            prices = json.loads(raw_prices) if isinstance(raw_prices, str) else raw_prices
+                            if isinstance(prices, (list, tuple)) and len(prices) >= 2:
+                                price_yes = float(prices[yes_idx])
+                                price_no = float(prices[no_idx])
+
+                        # Legacy fallback: some responses embed prices in a
+                        # tokens array.
+                        if price_yes == 0.0 and price_no == 0.0:
+                            for token in m.get("tokens", []):
+                                if token.get("outcome") == "Yes":
+                                    price_yes = float(token.get("price", 0))
+                                elif token.get("outcome") == "No":
+                                    price_no = float(token.get("price", 0))
+
+                        # --- Token IDs (clobTokenIds is the primary source) ---
+                        yes_token = no_token = ""
+                        raw_ids = m.get("clobTokenIds")
+                        if raw_ids:
+                            ids = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
+                            if isinstance(ids, (list, tuple)) and len(ids) >= 2:
+                                yes_token = str(ids[yes_idx])
+                                no_token = str(ids[no_idx])
+
+                        # Legacy fallback
+                        if not yes_token:
+                            for token in m.get("tokens", []):
+                                if token.get("outcome") == "Yes":
+                                    yes_token = token.get("token_id", "")
+                                elif token.get("outcome") == "No":
+                                    no_token = token.get("token_id", "")
+
+                        # --- Numeric fields (prefer *Num variants) ---
+                        def _num(key: str) -> float:
+                            v = m.get(key + "Num")
+                            if v is None:
+                                v = m.get(key, 0)
+                            try:
+                                return float(v)
+                            except (TypeError, ValueError):
+                                return 0.0
 
                         markets.append(MarketInfo(
-                            condition_id=m.get("conditionId", ""),
+                            condition_id=m.get("conditionId", m.get("condition_id", "")),
                             question=m.get("question", ""),
                             description=m.get("description", ""),
-                            end_date=m.get("endDate", ""),
+                            end_date=m.get("endDate", m.get("end_date", "")),
                             yes_token_id=yes_token,
                             no_token_id=no_token,
                             price_yes=price_yes,
                             price_no=price_no,
-                            volume=float(m.get("volume", 0)),
-                            liquidity=float(m.get("liquidity", 0)),
+                            volume=_num("volume"),
+                            liquidity=_num("liquidity"),
                         ))
-                    except (KeyError, ValueError, TypeError):
+                    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
                         continue
                 logger.info(f"Fetched {len(markets)} markets from Polymarket")
+                elapsed_ms = (time.time() - t0) * 1000
+                ingestion_metrics.source("polymarket_rest").record_fetch(elapsed_ms, items=len(markets))
                 return markets
         except Exception as e:
             logger.error(f"Failed to fetch markets: {e}")
+            elapsed_ms = (time.time() - t0) * 1000
+            ingestion_metrics.source("polymarket_rest").record_fetch(elapsed_ms)
             return []
 
     async def get_orderbook(self, token_id: str) -> OrderbookSnapshot | None:
@@ -155,6 +214,7 @@ class PolymarketClient:
 
     async def get_recent_trades(self, token_id: str, limit: int = 500) -> list[Trade]:
         """Fetch recent trades for a token."""
+        t0 = time.time()
         try:
             async with self._session.get(
                 f"{POLYMARKET_REST}/trades",
@@ -177,9 +237,13 @@ class PolymarketClient:
                         ))
                     except (KeyError, ValueError, TypeError):
                         continue
+                elapsed_ms = (time.time() - t0) * 1000
+                ingestion_metrics.source("polymarket_trades").record_fetch(elapsed_ms, items=len(trades))
                 return trades
         except Exception as e:
             logger.warning(f"Trade fetch failed for {token_id}: {e}")
+            elapsed_ms = (time.time() - t0) * 1000
+            ingestion_metrics.source("polymarket_trades").record_fetch(elapsed_ms)
             return []
 
     async def stream_trades(self, token_ids: list[str]) -> AsyncIterator[Trade]:

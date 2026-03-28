@@ -1,0 +1,20 @@
+:root {
+  --bg:          #0A0A0B;
+  --bg-panel:    #0E0E10;
+  --bg-card:     #121215;
+  --border:      rgba(255,255,255,0.08);
+  --border-hi:   rgba(255,255,255,0.14);
+  --amber:       #F5A623;
+  --amber-dim:   rgba(245,166,35,0.15);
+  --blue:        #00D4FF;
+  --blue-dim:    rgba(0,212,255,0.12);
+  --green:       #22c55e;
+  --green-dim:   rgba(34,197,94,0.15);
+  --rose:        #ef4444;
+  --rose-dim:    rgba(239,68,68,0.15);
+  --text:        #E8E8E8;
+  --text-dim:    rgba(255,255,255,0.40);
+  --text-mid:    rgba(255,255,255,0.60);
+  --font-mono:   'IBM Plex Mono', 'Courier New', monospace;
+  --font-label:  'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif;
+}

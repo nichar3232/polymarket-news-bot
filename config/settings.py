@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     polymarket_private_key: str = ""
     polymarket_funder_address: str = ""
 
+    # Polygon network
+    polygon_testnet: bool = True              # True = Amoy testnet, False = mainnet
+    polygon_rpc_url: str = "https://rpc-amoy.polygon.technology"
+    clob_host: str = "https://clob.polymarket.com"
+
     # LLM providers
     groq_api_key: str = ""
     gemini_api_key: str = ""
@@ -36,14 +41,14 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379"
 
-    # Trading mode: "paper" | "live"
+    # Trading mode: "paper" | "live" | "testnet"
     trading_mode: str = "paper"
 
     # Risk limits
-    max_position_size_usd: float = 50.0
-    max_portfolio_exposure: float = 0.25
-    min_edge_threshold: float = 0.03
-    kelly_fraction: float = 0.25
+    max_position_size_usd: float = 30.0    # was 50 — smaller bets while model improves
+    max_portfolio_exposure: float = 0.20   # was 0.25
+    min_edge_threshold: float = 0.05       # was 0.03 — require stronger edge to trade
+    kelly_fraction: float = 0.15           # was 0.25 — less aggressive sizing
 
     # Agent behavior
     signal_refresh_seconds: int = 60
@@ -53,6 +58,14 @@ class Settings(BaseSettings):
     @property
     def is_paper_trading(self) -> bool:
         return self.trading_mode == "paper"
+
+    @property
+    def is_testnet(self) -> bool:
+        return self.trading_mode == "testnet" or self.polygon_testnet
+
+    @property
+    def chain_id(self) -> int:
+        return 80002 if self.is_testnet else 137
 
     @property
     def has_groq(self) -> bool:

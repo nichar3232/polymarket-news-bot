@@ -127,6 +127,45 @@ class PaperTrader:
             current_price=current_price,
         )
 
+    def estimate_slippage(self, size_usd: float, orderbook_depth: float = 0.0) -> float:
+        """Estimate price impact based on position size relative to available depth.
+
+        Uses a square-root market impact model: impact = k * sqrt(size / depth)
+        This is standard in microstructure literature (Kyle 1985, Almgren-Chriss).
+
+        Returns the estimated slippage as a fraction (e.g., 0.003 = 0.3%).
+        """
+        if orderbook_depth <= 0:
+            return self.SLIPPAGE  # fallback to default
+
+        # Square-root impact: k * sqrt(Q/V) where Q=order size, V=available depth
+        k = 0.1  # calibrated for prediction market orderbooks
+        participation_rate = size_usd / orderbook_depth
+        impact = k * (participation_rate ** 0.5)
+
+        # Floor at minimum slippage, cap at 2%
+        return max(self.SLIPPAGE, min(impact, 0.02))
+
+    def adjust_size_for_depth(self, size_usd: float, orderbook_depth: float) -> float:
+        """Reduce position size if orderbook is too thin.
+
+        If our order would consume >10% of available depth, scale down
+        to avoid excessive market impact.
+        """
+        if orderbook_depth <= 0:
+            return size_usd
+
+        max_participation = 0.10  # never take more than 10% of book depth
+        max_size = orderbook_depth * max_participation
+
+        if size_usd > max_size:
+            logger.info(
+                f"Depth-adjusted size: ${size_usd:.2f} -> ${max_size:.2f} "
+                f"(book depth=${orderbook_depth:.2f}, max 10% participation)"
+            )
+            return max_size
+        return size_usd
+
     def get_order_history(self) -> list[PaperOrder]:
         return list(self._order_history)
 

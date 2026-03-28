@@ -161,11 +161,12 @@ def _news_to_lr(relevance: float, sentiment: float, confidence: float) -> float:
 
     Formula:
     LR = exp(sentiment * relevance * confidence * k)
-    k = 2.5 calibrated so that a highly relevant, strongly positive article → LR ≈ 3.5
+    k = 1.2 (calibrated so max-strength article -> LR ~ 1.8, not 3.5)
     """
-    if relevance < 0.1:
+    if relevance < 0.15:
         return 1.0
 
-    k = 2.5
+    k = 1.2
     exponent = sentiment * relevance * confidence * k
-    return math.exp(exponent)
+    # Hard cap: no single news article should produce LR > 2.0 or < 0.5
+    return max(0.5, min(2.0, math.exp(exponent)))

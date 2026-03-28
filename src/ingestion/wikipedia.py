@@ -19,6 +19,8 @@ from typing import Callable
 import aiohttp
 from loguru import logger
 
+from src.ingestion.metrics import ingestion_metrics
+
 
 WIKIPEDIA_RECENT_CHANGES = "https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_ARTICLE_CHANGES = "https://en.wikipedia.org/w/api.php"
@@ -236,12 +238,20 @@ class WikipediaEditMonitor:
         self,
         callback: Callable,
         poll_interval: int = 120,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
         """
         Continuously monitor Wikipedia edits.
         Calls callback(page_title, signal) when velocity threshold exceeded.
+
+        Args:
+            session: Optional externally-managed ClientSession.  When provided
+                     the caller owns the session lifecycle (no close on exit).
         """
-        async with aiohttp.ClientSession() as session:
+        owns_session = session is None
+        if owns_session:
+            session = aiohttp.ClientSession()
+        try:
             # Initial load for tracked pages
             for page in list(self._pages_of_interest):
                 edits = await self._fetch_page_edits(session, page, limit=100)
@@ -250,13 +260,17 @@ class WikipediaEditMonitor:
 
             while True:
                 # Fetch global recent changes
+                t0 = time.time()
                 global_edits = await self._fetch_recent_changes(session, minutes_back=3)
                 self._record_edits(global_edits)
+
+                total_edits = len(global_edits)
 
                 # Targeted page fetches for our markets
                 for page in list(self._pages_of_interest):
                     edits = await self._fetch_page_edits(session, page, limit=20)
                     self._record_edits(edits)
+                    total_edits += len(edits)
 
                     signal = self.compute_velocity(page)
                     if signal.is_spiking:
@@ -266,4 +280,10 @@ class WikipediaEditMonitor:
                         )
                         await callback(page, signal)
 
+                elapsed_ms = (time.time() - t0) * 1000
+                ingestion_metrics.source("wikipedia").record_fetch(elapsed_ms, items=total_edits)
+
                 await asyncio.sleep(poll_interval)
+        finally:
+            if owns_session:
+                await session.close()

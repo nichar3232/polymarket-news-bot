@@ -3,195 +3,151 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Polymarket News Bot</title>
+  <title>Polymarket Agent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-  <!-- ── Topbar ────────────────────────────────────────────────── -->
+  <!-- ── Topbar ──────────────────────────────────────────────── -->
   <header class="topbar">
     <div class="topbar-left">
-      <div class="logo-group">
-        <svg class="logo-icon" viewBox="0 0 20 20" fill="none">
-          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M6 10 L10 6 L14 10 L10 14 Z" fill="currentColor" opacity="0.7"/>
-          <circle cx="10" cy="10" r="2" fill="currentColor"/>
-        </svg>
-        <span class="logo">POLYMARKET</span>
-        <span class="logo-sub">NEWS BOT</span>
-      </div>
+      <span class="logo">Polymarket Agent</span>
       <span class="mode-badge" id="mode-badge">PAPER</span>
-    </div>
-
-    <div class="topbar-center">
-      <div class="topbar-stat">
-        <span class="ts-label">P&amp;L</span>
-        <span class="ts-val" id="total-pnl">—</span>
-      </div>
-      <div class="topbar-divider"></div>
-      <div class="topbar-stat">
-        <span class="ts-label">VALUE</span>
-        <span class="ts-val" id="total-value">—</span>
-      </div>
-      <div class="topbar-divider"></div>
-      <div class="topbar-stat">
-        <span class="ts-label">TRADES</span>
-        <span class="ts-val" id="total-trades">—</span>
-      </div>
-      <div class="topbar-divider"></div>
-      <div class="topbar-stat">
-        <span class="ts-label">WIN RATE</span>
-        <span class="ts-val" id="win-rate">—</span>
-      </div>
-    </div>
-
-    <div class="topbar-right">
       <div class="ws-pill" id="ws-pill">
         <span class="ws-dot" id="ws-dot"></span>
-        <span class="ws-label" id="ws-status">connecting…</span>
+        <span class="ws-label" id="ws-status">connecting...</span>
       </div>
-      <span class="uptime-badge" id="uptime">00:00:00</span>
     </div>
+
+    <div class="topbar-stats">
+      <div class="topbar-stat">
+        <span class="ts-label">P&amp;L</span>
+        <span class="ts-val" id="total-pnl">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Value</span>
+        <span class="ts-val" id="total-value">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Trades</span>
+        <span class="ts-val" id="total-trades">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Win Rate</span>
+        <span class="ts-val" id="win-rate">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Sharpe</span>
+        <span class="ts-val" id="sharpe-ratio">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Max DD</span>
+        <span class="ts-val" id="max-drawdown">&mdash;</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="ts-label">Profit F.</span>
+        <span class="ts-val" id="profit-factor">&mdash;</span>
+      </div>
+    </div>
+
+    <span class="uptime-badge" id="uptime">00:00:00</span>
   </header>
 
-  <!-- ── Main grid ─────────────────────────────────────────────── -->
+  <!-- ── Main grid ───────────────────────────────────────────── -->
   <main class="grid">
 
-    <!-- LEFT: Portfolio + Chart -->
+    <!-- LEFT: Portfolio + Positions -->
     <section class="panel" id="panel-portfolio">
-
-      <div class="panel-header">
-        <span class="ph-label">PORTFOLIO</span>
-      </div>
-
+      <div class="section-label">Portfolio</div>
       <div class="portfolio-cards">
-        <div class="pf-card pf-card-main">
-          <div class="pf-card-label">Current Value</div>
-          <div class="pf-card-val" id="p-value">—</div>
-          <div class="pf-card-sub" id="p-pnl">—</div>
+        <div class="pf-card pf-big">
+          <div class="pf-card-label">Total Value</div>
+          <div class="pf-card-val" id="p-value">&mdash;</div>
+          <div class="pf-card-sub" id="p-pnl">&mdash;</div>
         </div>
         <div class="pf-card">
-          <div class="pf-card-label">Cash Available</div>
-          <div class="pf-card-val" id="p-cash">—</div>
+          <div class="pf-card-label">Cash</div>
+          <div class="pf-card-val" id="p-cash">&mdash;</div>
         </div>
         <div class="pf-card">
           <div class="pf-card-label">Exposure</div>
-          <div class="pf-card-val" id="p-exposure">—</div>
-        </div>
-        <div class="pf-card">
-          <div class="pf-card-label">Fees Paid</div>
-          <div class="pf-card-val" id="p-fees">—</div>
+          <div class="pf-card-val" id="p-exposure">&mdash;</div>
         </div>
       </div>
 
-      <!-- P&L chart -->
-      <div class="panel-header" style="margin-top:12px">
-        <span class="ph-label">P&amp;L HISTORY</span>
-      </div>
-      <div class="chart-wrap">
-        <canvas id="pnl-chart"></canvas>
-      </div>
+      <div class="chart-wrap"><canvas id="pnl-chart"></canvas></div>
 
-      <!-- Open Positions -->
-      <div class="panel-header" style="margin-top:12px">
-        <span class="ph-label">OPEN POSITIONS</span>
-        <span class="ph-count" id="position-count">0</span>
-      </div>
+      <div class="section-label">Positions <span class="ph-count" id="position-count">0</span></div>
       <table class="data-table" id="positions-table">
-        <thead>
-          <tr>
-            <th>Market</th>
-            <th>Dir</th>
-            <th>Size</th>
-            <th>Entry</th>
-            <th>P&amp;L</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Market</th><th>Dir</th><th>Size</th><th>Entry</th><th>P&amp;L</th></tr></thead>
         <tbody id="positions-body">
           <tr><td colspan="5" class="empty-row">No open positions</td></tr>
         </tbody>
       </table>
 
+      <div class="section-label" style="margin-top:12px">Calibration</div>
+      <div class="calibration-wrap"><canvas id="calibration-chart"></canvas></div>
     </section>
 
-    <!-- CENTER: Market analysis -->
-    <section class="panel panel-wide" id="panel-markets">
+    <!-- CENTER: Markets + Signals -->
+    <section class="panel panel-center" id="panel-markets">
+      <div class="section-label">Markets <span class="ph-count" id="market-count">&mdash;</span> <span class="ph-count" id="active-signals" style="display:none"></span></div>
 
-      <div class="panel-header">
-        <span class="ph-label">MARKET ANALYSIS</span>
-        <span class="ph-count" id="market-count">— markets</span>
+      <div id="markets-skeleton" class="skeleton-container">
+        <div class="skeleton-card"><div class="skeleton-line skeleton-line-lg"></div><div class="skeleton-line skeleton-line-sm"></div></div>
+        <div class="skeleton-card"><div class="skeleton-line skeleton-line-lg"></div><div class="skeleton-line skeleton-line-sm"></div></div>
+        <div class="skeleton-status"><div class="skeleton-spinner"></div> Initializing...</div>
       </div>
 
-      <table class="data-table markets-tbl" id="markets-table">
-        <thead>
-          <tr>
-            <th style="width:36%">Question</th>
-            <th>Prior</th>
-            <th>Posterior</th>
-            <th>Edge</th>
-            <th>Signals</th>
-            <th>90% CI</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="markets-body">
-          <tr><td colspan="7" class="empty-row">Waiting for first evaluation cycle…</td></tr>
-        </tbody>
-      </table>
+      <div id="markets-table-wrap" class="hidden">
+        <table class="data-table markets-tbl" id="markets-table">
+          <thead><tr>
+            <th style="width:34%">Question</th>
+            <th>Prior</th><th>Posterior</th><th>Edge</th>
+            <th>Signals</th><th>Action</th>
+          </tr></thead>
+          <tbody id="markets-body"></tbody>
+        </table>
+      </div>
 
       <!-- Signal breakdown -->
       <div id="signal-breakdown" class="signal-breakdown hidden">
         <div class="breakdown-header">
-          <div class="breakdown-title-group">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0">
-              <circle cx="7" cy="7" r="6" stroke="var(--cyan)" stroke-width="1.2"/>
-              <path d="M7 4v4M7 9.5v.5" stroke="var(--cyan)" stroke-width="1.2" stroke-linecap="round"/>
-            </svg>
-            <span id="breakdown-title">Signal breakdown</span>
-          </div>
-          <button class="close-btn" onclick="closeBreakdown()">✕</button>
+          <span id="breakdown-title" class="breakdown-title">Signal breakdown</span>
+          <button class="close-btn" onclick="closeBreakdown()">&#x2715;</button>
         </div>
-
-        <!-- Bayesian viz at top of breakdown -->
         <div class="bayesian-viz" id="bayesian-viz"></div>
-
-        <!-- Signal rows -->
+        <div class="signal-grid" id="signal-grid"></div>
         <div class="signals-header">
-          <span>Source</span>
-          <span>LR</span>
-          <span>Conf.</span>
-          <span style="grid-column:4/6">Strength</span>
-          <span>Notes</span>
+          <span>Source</span><span>LR</span><span>Conf.</span>
+          <span style="grid-column:4/6">Strength</span><span>Notes</span>
         </div>
         <div id="breakdown-body"></div>
       </div>
 
+      <div class="section-label" style="margin-top:14px">Radar <span class="ph-count" id="radar-market-label">all markets</span></div>
+      <div class="radar-wrap"><canvas id="radar-chart"></canvas></div>
     </section>
 
-    <!-- RIGHT: Activity log -->
-    <section class="panel" id="panel-log">
-
-      <div class="panel-header">
-        <span class="ph-label">ACTIVITY LOG</span>
-        <button class="clear-btn" onclick="clearLog()">clear</button>
-      </div>
-
+    <!-- RIGHT: Log + News -->
+    <section class="panel panel-right" id="panel-right">
+      <div class="section-label">Activity <button class="clear-btn" onclick="clearLog()">clear</button></div>
       <div class="log-wrap" id="log-wrap">
-        <div class="log-empty">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="opacity:0.3;display:block;margin:0 auto 8px">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          Waiting for events…
-        </div>
+        <div class="log-empty">Waiting for events...</div>
       </div>
 
+      <div class="section-label">News <span class="ph-count" id="news-count">0</span></div>
+      <div class="news-feed" id="news-feed">
+        <div class="news-empty">Monitoring RSS feeds...</div>
+      </div>
     </section>
 
   </main>
+
+  <div class="trade-notifications" id="trade-notifications"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="/static/app.js"></script>
